@@ -1,4 +1,4 @@
-// Pega aquí la URL de la "Aplicación web" de Apps Script (termina en /exec)
+// URL de la "Aplicación web" de Apps Script (termina en /exec)
 window.CONFIG = {
-  API_URL: "PEGA_AQUI_LA_URL_DE_APPS_SCRIPT/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbypxpiJ9zg6P0mStMsiHK7gXmdLnWrPeHdklcmPQj08mXTs5FhTOypkV-d_T1lyPkCZAA/exec"
 };

@@ -4,7 +4,7 @@ const T = { tab: 'vivo', sesiones: [], sel: null, timer: null, cfg: null, dash: 
 const NOMBRE_DOC = 'Leandro Bascuñán';
 
 function shell(contenido) {
-  const tabs = [['vivo', '📡 En vivo'], ['corr', '✍️ Corrección'], ['res', '📊 Resultados'], ['ses', '🗂️ Sesiones'], ['inf', '📄 Informes'], ['cfg', '⚙️ Ajustes']];
+  const tabs = [['vivo', '📡 En vivo'], ['corr', '✍️ Corrección'], ['res', '📊 Resultados'], ['est', '👥 Estudiantes'], ['ses', '🗂️ Sesiones'], ['inf', '📄 Informes'], ['cfg', '⚙️ Ajustes']];
   App.innerHTML = `<div class="hero wide"><div class="in"><div class="row"><div class="brand sp"><span class="dot">$</span>Panel docente · Economía y Sociedad · Unidad 4</div><button class="btn sm ghost" id="out" style="color:#fff;border-color:rgba(255,255,255,.4)">Salir</button></div><h1>Hola, ${NOMBRE_DOC}</h1><p>Participación, resultados, corrección con IA e informes.</p></div></div>
   <div class="wrap wide pull"><div class="tabs">${tabs.map(t => `<button class="tab ${T.tab === t[0] ? 'on' : ''}" data-t="${t[0]}">${t[1]}</button>`).join('')}</div><div id="main">${contenido || ''}</div></div>`;
   $('#out').onclick = salir; $$('.tab').forEach(b => b.onclick = () => ir(b.dataset.t));
@@ -30,7 +30,7 @@ async function arrancar() {
 }
 function ir(t) {
   clearInterval(T.timer); T.tab = t; shell('');
-  ({ vivo: vVivo, corr: vCorr, res: vRes, ses: vSes, inf: vInf, cfg: vCfg })[t]();
+  ({ vivo: vVivo, corr: vCorr, res: vRes, est: vEst, ses: vSes, inf: vInf, cfg: vCfg })[t]();
 }
 function selSesion(id = 'sel') {
   return `<select id="${id}" style="max-width:380px">${T.sesiones.map(s => `<option value="${esc(s.id)}" ${s.id === T.sel ? 'selected' : ''}>Sesión ${s.numero} · ${esc(s.titulo)}</option>`).join('')}</select>`;
@@ -94,9 +94,15 @@ async function vCorr(paso) {
     detalle = `<div class="card"><p><b>${R.length}</b> respuestas · <b>${ac}</b> correctas (${R.length ? Math.round(ac / R.length * 100) : 0}%)</p>${p.tipo === 'opcion' || p.tipo === 'vf' || p.tipo === 'encuesta' ? (p.opciones || ['Verdadero', 'Falso']).map((o, i) => `<div style="margin:8px 0"><div class="row small"><span class="sp">${p.tipo !== 'vf' ? L[i] + '. ' : ''}${esc(o)} ${(p.tipo === 'opcion' && i === p.correcta) || (p.tipo === 'vf' && (i === 0) === (p.correcta === 'V')) ? '✅' : ''}</span><b>${cnt[i]}</b></div><div class="bar"><i style="width:${R.length ? cnt[i] / R.length * 100 : 0}%"></i></div></div>`).join('') : `<p class="mut">Respuesta correcta: ${esc(p.correcta)}</p>`}</div>
     <div class="scroll"><table class="t"><tr><th>Estudiante</th><th>Respuesta</th><th>Pts</th></tr>${R.map(r => `<tr><td>${esc(r.nombre)}</td><td>${esc(r.respuesta)}</td><td>${r.final ?? '—'}</td></tr>`).join('')}</table></div>`;
   }
-  $('#main').innerHTML = `<div class="card"><div class="row">${selSesion()}<select id="pp" style="max-width:520px">${P.map(x => `<option value="${esc(x.id)}" ${x.id === paso ? 'selected' : ''}>${esc((x.titulo || x.pregunta).slice(0, 70))} (${x.tipo})</option>`).join('')}</select></div>
+  $('#main').innerHTML = `<div class="card"><div class="row">${selSesion()}<button class="btn sm gold" id="mailall">✉ Enviar copias por correo</button><select id="pp" style="max-width:520px">${P.map(x => `<option value="${esc(x.id)}" ${x.id === paso ? 'selected' : ''}>${esc((x.titulo || x.pregunta).slice(0, 70))} (${x.tipo})</option>`).join('')}</select></div>
   ${p.tipo === 'abierta' ? `<div class="hint" style="margin-top:8px"><b>Pauta:</b> ${esc(p.modelo || '—')}</div><div class="row" style="margin-top:10px"><button class="btn" id="ia" ${pend ? '' : 'disabled'}>🤖 Corregir con IA (${pend} pendientes)</button><button class="btn gold" id="ap" ${ia ? '' : 'disabled'}>✔ Aprobar sugerencias de IA (${ia})</button></div><div id="iam"></div>` : ''}</div>${detalle}`;
   $('#sel').onchange = e => { T.sel = e.target.value; T.pasoCorr = null; vCorr(); }; $('#pp').onchange = e => vCorr(e.target.value);
+  $('#mailall').onclick = async ev => {
+    if (!confirm('Se enviará a cada estudiante que respondió, desde tu correo, un comprobante formal con sus respuestas, puntajes y retroalimentación disponibles. ¿Continuar?')) return;
+    const b = ev.target; b.disabled = true; b.textContent = 'Enviando…';
+    try { const d = await API.call('docEnviarCopias', { sesion: T.sel }); alert(`Correos enviados: ${d.enviados}\nSin correo registrado: ${d.sinCorreo.length ? d.sinCorreo.join(', ') : 'ninguno'}\nFallos: ${d.fallos}\nCuota diaria restante: ${d.cuotaRestante}`); } catch (e) { manejar(e); }
+    b.disabled = false; b.textContent = '✉ Enviar copias por correo';
+  };
   if (p.tipo === 'abierta') {
     $('#ia').onclick = async () => {
       const b = $('#ia'); b.disabled = true; let tot = 0;
@@ -122,6 +128,34 @@ async function vRes() {
     const csv = '﻿' + f.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'resultados_unidad4.csv'; a.click();
   };
+}
+
+/* ---------- ESTUDIANTES ---------- */
+async function vEst() {
+  $('#main').innerHTML = '<div class="c"><span class="spin"></span></div>';
+  let D; try { D = await API.call('docEstudiantes'); } catch (e) { return manejar(e); }
+  const fc = T.cursoE || ''; const lista = D.estudiantes.filter(e => !fc || e.curso === fc);
+  $('#main').innerHTML = `<div class="grid2"><div class="card"><h3 id="ft">Agregar / editar estudiante</h3>
+    <label>RUT</label><input id="er" placeholder="12.345.678-9"><label>Nombre completo</label><input id="en" placeholder="Nombres y apellidos">
+    <label>Curso</label><input id="ec" list="cl" placeholder="Ej: 3° Medio A"><datalist id="cl">${D.cursos.map(c => `<option value="${esc(c)}">`).join('')}</datalist>
+    <label>Correo institucional</label><input id="em" type="email" placeholder="rut@andaliensur.cl"><div class="hint">Si lo dejas vacío no recibirá copias por correo.</div>
+    <div id="em1"></div><button class="btn block" id="eg" style="margin-top:12px">Guardar estudiante</button></div>
+  <div class="card"><h3>Importar lista</h3><p class="small mut">Copia las filas desde Excel/Sheets (Correos · Curso · Nombre Alumno · Electivo) y pégalas aquí. El RUT se toma del correo. Si el RUT ya existe, se actualizan nombre y curso.</p><textarea id="ei" style="min-height:130px" placeholder="23211642-0@andaliensur.cl&#9;3° Medio A&#9;Sepulveda Castro, Ezequiel Camilo&#9;Economía y Sociedad"></textarea><div id="eim"></div><button class="btn block gold" id="eb" style="margin-top:10px">Importar</button></div></div>
+  <div class="card"><h3>Cursos</h3><div class="row">${D.cursos.map(c => `<span class="chip navy" style="font-size:.85rem">${esc(c)} <a href="#" data-rn="${esc(c)}" style="color:#fff;text-decoration:none" title="Renombrar">✎</a></span>`).join('')}</div><div class="hint">Un curso nuevo se crea al asignárselo a un estudiante. ✎ renombra el curso para todos sus estudiantes.</div></div>
+  <div class="card row"><select id="ef" style="max-width:220px"><option value="">Todos los cursos (${D.estudiantes.length})</option>${D.cursos.map(c => `<option ${c === fc ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><span class="sp small mut">${lista.length} estudiantes</span></div>
+  <div class="scroll"><table class="t"><tr><th>Estudiante</th><th>RUT</th><th>Curso</th><th>Correo</th><th>Último ingreso</th><th></th></tr>
+  ${lista.map(e => `<tr><td><b>${esc(e.nombre)}</b></td><td>${esc(e.rut)}</td><td>${esc(e.curso)}</td><td class="small">${esc(e.correo) || '<span class="chip warn">sin correo</span>'}</td><td class="small">${e.ultimo ? fmtFecha(e.ultimo, true) : '—'}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-ed="${esc(e.rut)}">Editar</button> <button class="btn sm ghost" data-del="${esc(e.rut)}">🗑</button></td></tr>`).join('') || '<tr><td colspan="6" class="c mut">Sin estudiantes. Importa tu lista o agrega uno.</td></tr>'}</table></div>`;
+  $('#er').oninput = e => { e.target.value = formatRut(e.target.value); };
+  $('#ef').onchange = e => { T.cursoE = e.target.value; vEst(); };
+  $('#eg').onclick = async () => { try { await API.call('docGuardarEstudiante', { estudiante: { rut: $('#er').value, nombre: $('#en').value, curso: $('#ec').value, correo: $('#em').value } }); toast('Estudiante guardado ✅'); vEst(); } catch (e) { $('#em1').innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') manejar(e); } };
+  $('#eb').onclick = async ev => {
+    const b = ev.target; b.disabled = true; b.textContent = 'Importando…';
+    try { const d = await API.call('docImportar', { texto: $('#ei').value }); $('#eim').innerHTML = `<div class="fb ok">Agregados: <b>${d.agregados}</b> · Actualizados: <b>${d.actualizados}</b>${d.errores.length ? `</div><div class="err">Con problemas (${d.errores.length}):<br>${d.errores.map(x => `Línea ${x.linea}: ${esc(x.motivo)} (${esc(x.texto)})`).join('<br>')}` : ''}</div>`; setTimeout(() => { if (!d.errores.length) vEst(); }, 1200); }
+    catch (e) { manejar(e); } b.disabled = false; b.textContent = 'Importar';
+  };
+  $$('[data-ed]').forEach(b => b.onclick = () => { const e = D.estudiantes.find(x => x.rut === b.dataset.ed); $('#er').value = e.rut; $('#en').value = e.nombre; $('#ec').value = e.curso; $('#em').value = e.correo; $('#ft').scrollIntoView({ behavior: 'smooth' }); });
+  $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('¿Quitar a este estudiante de la asignatura? Sus respuestas quedan en la planilla.')) return; try { await API.call('docEliminarEstudiante', { rut: b.dataset.del }); vEst(); } catch (e) { manejar(e); } });
+  $$('[data-rn]').forEach(a => a.onclick = async ev => { ev.preventDefault(); const n = prompt('Nuevo nombre para el curso «' + a.dataset.rn + '»:', a.dataset.rn); if (!n || n === a.dataset.rn) return; try { const d = await API.call('docRenombrarCurso', { de: a.dataset.rn, a: n }); toast(`Curso renombrado (${d.estudiantes} estudiantes)`); vEst(); } catch (e) { manejar(e); } });
 }
 
 /* ---------- SESIONES (editor) ---------- */
@@ -217,6 +251,7 @@ function vCfg() {
   const f = (k, l, h = '') => `<label>${l}</label><input data-c="${k}" value="${esc(c[k])}">${h ? `<div class="hint">${h}</div>` : ''}`;
   $('#main').innerHTML = `<div class="card"><h3>Ajustes generales</h3>${f('colegio', 'Establecimiento')}${f('asignatura', 'Asignatura')}${f('nombre_unidad', 'Nombre de la unidad')}${f('docente', 'Nombre del docente (aparece en informes)')}${f('total_sesiones', 'Total de sesiones planificadas', 'Se usa para calcular el progreso. Puedes cambiarlo cuando quieras (14 por defecto).')}${f('cursos', 'Cursos (separados por coma)', 'Aparecen como opciones al inscribirse.')}${f('exigencia', '% de exigencia para la nota 4,0')}${f('logo_url', 'URL del logo para los informes (opcional)')}
   <label>¿Los estudiantes pueden descargar su informe?</label><select data-c="informe_visible"><option value="NO" ${c.informe_visible !== 'SI' ? 'selected' : ''}>No (solo yo)</option><option value="SI" ${c.informe_visible === 'SI' ? 'selected' : ''}>Sí</option></select>
+  <label>Enviar copia por correo al estudiante cuando termina de participar</label><select data-c="correo_auto"><option value="SI" ${c.correo_auto !== 'NO' ? 'selected' : ''}>Sí, automáticamente</option><option value="NO" ${c.correo_auto === 'NO' ? 'selected' : ''}>No (solo cuando yo la envíe)</option></select><div class="hint">Los correos salen desde tu cuenta de Google. Cuenta personal: ~100 por día; Google Workspace: ~1.500.</div>
   ${f('modelo_ia', 'Modelo de IA (Groq)', 'Estado de la clave de IA: ' + (c.tiene_ia ? '✅ configurada' : '❌ falta GROQ_API_KEY en las propiedades del script'))}
   <button class="btn block" id="gc" style="margin-top:14px">Guardar ajustes</button></div>
   <div class="card"><h3>Datos</h3><p class="small mut">Toda la información (estudiantes, asistencia, respuestas y eventos de salida/reingreso) queda en tu planilla de Google.</p><a class="btn ghost" target="_blank" rel="noopener" href="${esc(T.planilla || '#')}">Abrir planilla de datos</a></div>`;

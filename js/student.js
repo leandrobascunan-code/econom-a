@@ -18,35 +18,25 @@ async function iniciar() {
 }
 
 /* ---------- Inscripción / ingreso ---------- */
-function vistaAuth(modo = 'ingresar') {
-  const reg = modo === 'registrar';
+function vistaAuth() {
   App.innerHTML = `${hero('¡Bienvenido/a!', 'Participa en clases desde tu celular.')}
   <div class="wrap pull"><div class="card">
-    <div class="tabs"><button class="tab ${!reg ? 'on' : ''}" data-m="ingresar">Ingresar</button><button class="tab ${reg ? 'on' : ''}" data-m="registrar">Inscribirme</button></div>
     <form id="f" autocomplete="off">
-      <label for="rut">RUT</label><input id="rut" inputmode="text" placeholder="12.345.678-9" required>
-      ${reg ? `<label for="nom">Nombre completo (nombres y apellidos)</label><input id="nom" placeholder="Ej: María José Pérez González" required>
-      <label for="cur">Curso</label>${cursoSel()}` : ''}
-      <label for="pin">${reg ? 'Crea un PIN de 4 números' : 'Tu PIN de 4 números'}</label><input id="pin" type="password" inputmode="numeric" maxlength="4" pattern="\\d{4}" placeholder="••••" required>
-      ${reg ? `<div class="hint">Recuerda tu PIN: lo usarás cada vez que ingreses. Si lo olvidas, pide ayuda al docente.</div>` : ''}
+      <label for="rut">Ingresa con tu RUT</label><input id="rut" inputmode="text" placeholder="12.345.678-9" required autofocus>
+      <div class="hint">Tu docente te inscribió en la asignatura. Si tu RUT no aparece, avísale.</div>
       <div id="msg"></div>
-      <button class="btn block" style="margin-top:16px" id="go">${reg ? 'Inscribirme y entrar' : 'Entrar'}</button>
+      <button class="btn block" style="margin-top:16px" id="go">Entrar</button>
     </form></div></div>`;
-  $$('.tab').forEach(b => b.onclick = () => vistaAuth(b.dataset.m));
   const rut = $('#rut'); rut.oninput = () => { rut.value = formatRut(rut.value); };
   $('#f').onsubmit = async ev => {
     ev.preventDefault(); const m = $('#msg'); m.innerHTML = '';
     if (!rutValido(rut.value)) { m.innerHTML = '<div class="err">El RUT no es válido. Revisa el dígito verificador.</div>'; return; }
     const b = $('#go'); b.disabled = true; b.textContent = 'Un momento…';
     try {
-      const d = await API.call(reg ? 'registrar' : 'ingresar', { rut: rut.value, pin: $('#pin').value, nombre: reg ? $('#nom').value : undefined, curso: reg ? $('#cur').value : undefined });
+      const d = await API.call('ingresar', { rut: rut.value });
       API.token = d.token; S.perfil = d.perfil; store.set('tok', d.token); store.set('perfil', JSON.stringify(d.perfil)); inicio();
-    } catch (e) { m.innerHTML = `<div class="err">${esc(e.message)}</div>`; b.disabled = false; b.textContent = reg ? 'Inscribirme y entrar' : 'Entrar'; }
+    } catch (e) { m.innerHTML = `<div class="err">${esc(e.message)}</div>`; b.disabled = false; b.textContent = 'Entrar'; }
   };
-}
-function cursoSel() {
-  const c = S.cfg.cursos || [];
-  return c.length ? `<select id="cur" required><option value="">Selecciona tu curso…</option>${c.map(x => `<option>${esc(x)}</option>`).join('')}</select>` : `<input id="cur" placeholder="Ej: 3°A" required>`;
 }
 function cerrarSesion() { detenerPart(); store.del('tok'); store.del('perfil'); API.token = null; vistaAuth(); }
 function manejar(e) { if (e.code === 'SESION_EXPIRADA') { toast('Tu sesión expiró. Ingresa nuevamente.'); cerrarSesion(); return true; } return false; }
@@ -100,6 +90,7 @@ function pintarSesion(tab) {
       const x = r[p.id]; const nota = x ? (x.puntaje === null ? '<span class="chip warn">En revisión</span>' : `<span class="chip ${x.puntaje >= p.puntos * .6 ? 'ok' : 'bad'}">${x.puntaje}/${p.puntos}</span>`) : '<span class="chip">Sin responder</span>';
       return `<div class="card"><div class="row"><b class="sp">${esc(p.titulo || p.pregunta)}</b>${nota}</div>${x && x.comentario ? `<div class="fb neu small">💬 ${esc(x.comentario)}</div>` : ''}</div>`;
     }).join('') || '<div class="card c mut">Sin actividades.</div>';
+    if (hechas) cuerpo += '<button class="btn block ghost" id="mail">📧 Enviar copia formal a mi correo</button>';
   } else {
     const ab = s.estado === 'abierta';
     cuerpo = `<div class="card"><h3>${esc(s.titulo)}</h3><p class="mut">${esc(s.descripcion || '')}</p>
@@ -114,6 +105,7 @@ function pintarSesion(tab) {
   <div class="wrap pull"><div class="tabs"><button class="tab ${tab === 'part' ? 'on' : ''}" data-t="part">Participar</button><button class="tab ${tab === 'mat' ? 'on' : ''}" data-t="mat">Material y videos</button><button class="tab ${tab === 'res' ? 'on' : ''}" data-t="res">Mis resultados</button></div>${cuerpo}</div>`;
   $('#back').onclick = inicio; $$('.tab').forEach(b => b.onclick = () => pintarSesion(b.dataset.t));
   if ($('#ent')) $('#ent').onclick = () => entrarPart();
+  if ($('#mail')) $('#mail').onclick = async ev => { ev.target.disabled = true; try { const d = await API.call('enviarCopia', { sesion: s.id }); toast(d.estado === 'enviado' ? '📧 Copia enviada a tu correo institucional.' : 'Ya te enviamos una copia hace unos minutos.', 4500); } catch (e) { toast(e.message, 5000); } ev.target.disabled = false; };
 }
 
 /* ---------- Modo participación ---------- */
@@ -186,7 +178,8 @@ function pintarPaso() {
   <div class="foot"><button class="btn ghost" id="ant" ${S.idx === 0 ? 'disabled' : ''}>← Anterior</button><span class="sp"></span><button class="btn" id="sig" ${S.idx >= lim ? 'disabled' : ''}>Siguiente →</button></div>`;
   document.body.appendChild(w);
   $('#ant').onclick = () => { S.idx--; pintarPaso(); }; $('#sig').onclick = () => { S.idx++; pintarPaso(); };
-  $('#sal').onclick = async () => { if (confirm('¿Terminar tu participación en esta sesión? Podrás volver mientras el plazo esté abierto.')) { await API.call('salir', { sesion: s.id, motivo: 'terminó voluntariamente' }).catch(() => { }); S.bloqueado = false; detenerPart(); w.remove(); const l = $('.lock'); if (l) l.remove(); verSesion(s.id); } };
+  $('#sal').onclick = async () => { if (confirm('¿Terminar tu participación en esta sesión? Podrás volver mientras el plazo esté abierto.')) { await API.call('salir', { sesion: s.id, motivo: 'terminó voluntariamente' }).catch(() => { }); S.bloqueado = false;
+    API.call('enviarCopia', { sesion: s.id, auto: true }).then(d => { if (d.estado === 'enviado') toast('📧 Te enviamos una copia de tus actividades a tu correo institucional.', 5000); }).catch(() => { }); detenerPart(); w.remove(); const l = $('.lock'); if (l) l.remove(); verSesion(s.id); } };
   if (p.tipo !== 'diapositiva') enlazarActividad(p);
 }
 
