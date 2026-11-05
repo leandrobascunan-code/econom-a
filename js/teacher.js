@@ -5,16 +5,39 @@ const NOMBRE_DOC = 'Leandro Bascuñán';
 
 function shell(contenido) {
   const tabs = [['vivo', '📡 En vivo'], ['corr', '✍️ Corrección'], ['res', '📊 Resultados'], ['est', '👥 Estudiantes'], ['ses', '🗂️ Sesiones'], ['inf', '📄 Informes'], ['cfg', '⚙️ Ajustes']];
-  App.innerHTML = `<div class="hero wide"><div class="in"><div class="row"><div class="brand sp"><span class="dot">$</span>Panel docente · Economía y Sociedad · Unidad 4</div><button class="btn sm ghost" id="out" style="color:#fff;border-color:rgba(255,255,255,.4)">Salir</button></div><h1>Hola, ${NOMBRE_DOC}</h1><p>Participación, resultados, corrección con IA e informes.</p></div></div>
+  App.innerHTML = `<div class="hero wide"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="brand sp">Colegio Marina de Chile<small>Panel docente · Economía y Sociedad · Unidad 4</small></div><button class="btn sm gold" id="vp">👁 Ver como estudiante</button><button class="btn sm ghost" id="out" style="color:#fff;border-color:rgba(255,255,255,.4)">Salir</button></div><h1>Hola, ${NOMBRE_DOC}</h1><p>Participación, resultados, corrección con IA e informes.</p></div></div>
   <div class="wrap wide pull"><div class="tabs">${tabs.map(t => `<button class="tab ${T.tab === t[0] ? 'on' : ''}" data-t="${t[0]}">${t[1]}</button>`).join('')}</div><div id="main">${contenido || ''}</div></div>`;
-  $('#out').onclick = salir; $$('.tab').forEach(b => b.onclick = () => ir(b.dataset.t));
+  $('#out').onclick = salir; $('#vp').onclick = () => verComoEstudiante(T.tab === 'vivo' || T.tab === 'corr' ? T.sel : '');
+  $$('.tab').forEach(b => b.onclick = () => ir(b.dataset.t));
+}
+/** Abre la app de estudiantes en una ventana con formato de celular, en modo vista previa (no guarda datos). */
+function verComoEstudiante(sid) {
+  const w = window.open('about:blank', 'vistaprevia', 'width=410,height=860');
+  API.call('docVistaPrevia').then(d => {
+    const base = location.href.replace(/docente\.html.*$/, '');
+    const u = base + 'index.html?previa=' + encodeURIComponent(d.token) + (sid ? '&s=' + encodeURIComponent(sid) : '');
+    if (w) w.location.href = u; else location.href = u;
+  }).catch(e => { if (w) w.close(); manejar(e); });
+}
+async function subirArchivo(file, onProg) {
+  const mime = file.type || 'application/octet-stream';
+  const ini = await API.call('docSubidaIniciar', { nombre: file.name, mime, tamano: file.size });
+  const CH = 3 * 1024 * 1024; let pos = 0, res = null;   // 3 MB = múltiplo de 256 KB
+  while (pos < file.size) {
+    const fin = Math.min(pos + CH, file.size); const u = new Uint8Array(await file.slice(pos, fin).arrayBuffer()); let s = '';
+    for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+    res = await API.call('docSubidaParte', { url: ini.sesion, data: btoa(s), inicio: pos, total: file.size, mime });
+    pos = fin; onProg(pos / file.size);
+  }
+  if (!res || !res.listo) throw new Error('La subida no se completó. Inténtalo de nuevo.');
+  return res;
 }
 function salir() { clearInterval(T.timer); store.del('dtok'); API.token = null; login(); }
 function manejar(e) { if (e.code === 'SESION_EXPIRADA') { toast('Sesión expirada. Ingresa de nuevo.'); salir(); return true; } toast(e.message, 5000); return false; }
 
 /* ---------- Login (solo clave) ---------- */
 function login() {
-  App.innerHTML = `<div class="hero"><div class="in"><div class="brand"><span class="dot">$</span>Panel docente</div><h1>${NOMBRE_DOC}</h1><p>Administrador · Economía y Sociedad</p></div></div>
+  App.innerHTML = `<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo big" src="img/insignia.png" alt=""><div class="brand">Colegio Marina de Chile<small>Panel docente</small></div></div><h1>${NOMBRE_DOC}</h1><p>Administrador · Economía y Sociedad</p></div></div>
   <div class="wrap pull"><form class="card" id="f"><label for="k">Clave</label><input id="k" type="password" autocomplete="current-password" required autofocus><div id="m"></div><button class="btn block" style="margin-top:14px">Ingresar</button></form></div>`;
   $('#f').onsubmit = async ev => {
     ev.preventDefault(); const b = $('#f button'); b.disabled = true;
@@ -41,12 +64,13 @@ function vVivo() {
   if (!T.sel) { $('#main').innerHTML = '<div class="card c mut">Crea una sesión en la pestaña «Sesiones».</div>'; return; }
   const url = location.href.replace(/docente\.html.*$/, '') + 'index.html?s=' + encodeURIComponent(T.sel);
   $('#main').innerHTML = `<div class="sidebyside"><div><div class="card"><label>Sesión</label>${selSesion()}<div class="qr" style="margin-top:12px"><div id="qr"></div></div><div class="small mut c" style="margin-top:8px;word-break:break-all">${esc(url)}</div><button class="btn sm ghost block" id="fs" style="margin-top:8px">🖥️ QR a pantalla completa</button></div>
-  <div class="card"><h3>Control de la clase</h3><div class="row"><button class="btn sm ghost" id="rl">Ritmo libre</button><button class="btn sm" id="rd">Guiar yo</button></div><div class="hint">«Guiar yo»: los estudiantes avanzan solo hasta la diapositiva que tú habilites.</div><label>Habilitar paso</label><select id="paso"></select><div class="row" style="margin-top:8px"><button class="btn sm ghost" id="pa">← Atrás</button><button class="btn sm" id="ps">Siguiente →</button></div></div></div>
+  <div class="card"><h3>Control de la clase</h3><div class="row"><button class="btn sm ghost" id="rl">Ritmo libre</button><button class="btn sm" id="rd">Guiar yo</button></div><div class="hint">«Guiar yo»: los estudiantes avanzan solo hasta la diapositiva que tú habilites.</div><button class="btn sm gold block" id="vps" style="margin-top:10px">👁 Ver esta sesión como estudiante</button><label>Habilitar paso</label><select id="paso"></select><div class="row" style="margin-top:8px"><button class="btn sm ghost" id="pa">← Atrás</button><button class="btn sm" id="ps">Siguiente →</button></div></div></div>
   <div id="live"><div class="c"><span class="spin"></span></div></div></div>`;
   new QRCode($('#qr'), { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
   $('#sel').onchange = e => { T.sel = e.target.value; vVivo(); };
   $('#fs').onclick = () => { const w = document.createElement('div'); w.className = 'lock'; w.style.background = '#fff'; w.innerHTML = `<div class="c" style="color:#0b2545"><h1 style="font-size:2.2rem">Escanea para participar</h1><div id="qq" style="display:inline-block;padding:16px;background:#fff"></div><p style="font-size:1.1rem">Sesión ${T.sesiones.find(s => s.id === T.sel).numero}</p></div>`; w.onclick = () => w.remove(); document.body.appendChild(w); const sz = Math.min(innerWidth, innerHeight) * .6; new QRCode($('#qq'), { text: url, width: sz, height: sz }); };
   const ctl = async d => { try { await API.call('docPaso', { sesion: T.sel, ...d }); refrescarVivo(); } catch (e) { manejar(e); } };
+  $('#vps').onclick = () => verComoEstudiante(T.sel);
   $('#rl').onclick = () => ctl({ ritmo: 'libre' }); $('#rd').onclick = () => ctl({ ritmo: 'docente' });
   $('#paso').onchange = e => ctl({ paso: +e.target.value }); $('#pa').onclick = () => ctl({ paso: Math.max(0, (T.dash?.sesion.paso_actual || 0) - 1) }); $('#ps').onclick = () => ctl({ paso: Math.min((T.dash?.sesion.pasos.length || 1) - 1, (T.dash?.sesion.paso_actual || 0) + 1) });
   refrescarVivo(); T.timer = setInterval(refrescarVivo, 8000);
@@ -162,16 +186,18 @@ async function vEst() {
 function vSes() {
   if (T.edit) return editor();
   $('#main').innerHTML = `<div class="row" style="margin-bottom:10px"><h2 class="sp" style="margin:0">Sesiones de la unidad</h2><button class="btn" id="nueva">＋ Nueva sesión</button></div>
-  ${T.sesiones.map(s => `<div class="card row"><div class="ses" style="width:auto;cursor:default"><div class="n" style="width:42px;height:42px;border-radius:12px;background:var(--navy);color:#fff;display:grid;place-items:center;font:700 1rem Poppins">${s.numero}</div></div><div class="sp"><b>${esc(s.titulo)}</b> ${chipSes(s.temporal)}<div class="small mut">${s.pasos.length} pasos · ${s.material.length} materiales · ${s.apertura ? fmtFecha(s.apertura) : 'sin apertura'} → ${s.cierre ? fmtFecha(s.cierre) : 'sin cierre'}</div></div><button class="btn sm ghost" data-e="${esc(s.id)}">Editar</button><button class="btn sm ghost" data-d="${esc(s.id)}">🗑</button></div>`).join('') || '<div class="card mut c">No hay sesiones.</div>'}`;
+  ${T.sesiones.map(s => `<div class="card row"><div class="ses" style="width:auto;cursor:default"><div class="n" style="width:42px;height:42px;border-radius:12px;background:var(--navy);color:#fff;display:grid;place-items:center;font:700 1rem Poppins">${s.numero}</div></div><div class="sp"><b>${esc(s.titulo)}</b> ${chipSes(s.temporal)}<div class="small mut">${s.pasos.length} pasos · ${s.material.length} materiales · ${s.apertura ? fmtFecha(s.apertura) : 'sin apertura'} → ${s.cierre ? fmtFecha(s.cierre) : 'sin cierre'}</div></div><button class="btn sm ghost" data-v="${esc(s.id)}">👁 Ver</button><button class="btn sm ghost" data-e="${esc(s.id)}">Editar</button><button class="btn sm ghost" data-d="${esc(s.id)}">🗑</button></div>`).join('') || '<div class="card mut c">No hay sesiones.</div>'}`;
   $('#nueva').onclick = () => { const mx = Math.max(0, ...T.sesiones.map(s => s.numero)); T.edit = { id: '', numero: mx + 1, titulo: '', descripcion: '', apertura: Date.now(), cierre: Date.now() + 7 * 864e5, estado: 'borrador', bloqueo: 'SI', ritmo: 'libre', paso_actual: 0, pasos: [], material: [], pauta_ia: '' }; editor(); };
+  $$('[data-v]').forEach(b => b.onclick = () => verComoEstudiante(b.dataset.v));
   $$('[data-e]').forEach(b => b.onclick = () => { T.edit = JSON.parse(JSON.stringify(T.sesiones.find(s => s.id === b.dataset.e))); editor(); });
   $$('[data-d]').forEach(b => b.onclick = async () => { if (!confirm('¿Eliminar la sesión? Las respuestas de los estudiantes se conservan en la planilla.')) return; try { await API.call('docEliminarSesion', { id: b.dataset.d }); T.sesiones = (await API.call('docSesiones')).sesiones; vSes(); } catch (e) { manejar(e); } });
 }
-const TIPOS = { diapositiva: 'Diapositiva', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', abierta: 'Pregunta abierta (IA)' };
+const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva / video incrustado', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', abierta: 'Pregunta abierta (IA)' };
 function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${etiqueta}</label>${tipo === 'area' ? `<textarea data-k="${k}">${esc(v ?? '')}</textarea>` : `<input data-k="${k}" type="${tipo}" value="${esc(v ?? '')}" ${extra}>`}`; }
 function pasoForm(p, i) {
   let f = '';
-  if (p.tipo === 'diapositiva') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Contenido (**negrita**, *cursiva*)', p.texto, 'area') + campo('imagen', 'URL de imagen (opcional)', p.imagen);
+  if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
+  else if (p.tipo === 'diapositiva') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Contenido (**negrita**, *cursiva*)', p.texto, 'area') + campo('imagen', 'URL de imagen (opcional)', p.imagen);
   else {
     f = (p.tipo === 'abierta' ? campo('titulo', 'Título corto', p.titulo) : '') + campo('pregunta', 'Pregunta', p.pregunta, 'area');
     if (p.tipo === 'opcion' || p.tipo === 'encuesta') f += campo('opciones', 'Opciones (una por línea)', (p.opciones || []).join('\n'), 'area');
@@ -185,9 +211,10 @@ function pasoForm(p, i) {
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
 }
 function leerPasos() {
-  return $$('.paso-ed').map(c => {
+  return $$('#pasos .paso-ed').map(c => {
     const g = k => { const e = $(`[data-k="${k}"]`, c); return e ? e.value : undefined; };
     const p = { id: T.edit.pasos[+c.dataset.i]?.id || 'n' + Math.random().toString(36).slice(2, 7), tipo: g('tipo') };
+    if (p.tipo === 'documento') { p.titulo = g('titulo'); p.texto = g('texto'); p.url = g('url'); p.driveId = g('driveId'); p.mime = g('mime'); return p; }
     if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); return p; }
     p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1;
     if (g('titulo') !== undefined) p.titulo = g('titulo');
@@ -200,7 +227,7 @@ function leerPasos() {
     return p;
   });
 }
-function leerMat() { return $$('.mat').map(c => ({ tipo: $('.mt', c).value, titulo: $('.mti', c).value, url: $('.mu', c).value, descripcion: $('.md', c).value })); }
+function leerMat() { return $$('.mat').map(c => ({ tipo: $('.mt', c).value, titulo: $('.mti', c).value, url: $('.mu', c).value, descripcion: $('.md', c).value, driveId: c.dataset.did || '', mime: c.dataset.mime || '' })); }
 function editor() {
   const e = T.edit;
   $('#main').innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn sm ghost" id="bk">← Volver</button><h2 class="sp" style="margin:0">${e.id ? 'Editar' : 'Nueva'} sesión ${e.numero}</h2><button class="btn" id="sv">💾 Guardar</button></div>
@@ -209,14 +236,36 @@ function editor() {
   <div class="grid2"><div><label>Abre (plazo)</label><input id="ap" type="datetime-local" value="${aInputLocal(e.apertura)}"></div><div><label>Cierra (plazo límite para actividades)</label><input id="ci" type="datetime-local" value="${aInputLocal(e.cierre)}"></div></div>
   <label>Modo concentración (bloqueo al salir de la app)</label><select id="bl"><option value="SI" ${e.bloqueo !== 'NO' ? 'selected' : ''}>Activado</option><option value="NO" ${e.bloqueo === 'NO' ? 'selected' : ''}>Desactivado</option></select>
   ${campo('pauta_ia', 'Notas para la IA (errores frecuentes, criterios)', e.pauta_ia, 'area')}</div>
+  <div class="card"><h3>⬆ Subir archivos completos</h3><p class="small mut">Arrastra o elige PDF, PowerPoint, Word, imágenes o videos. Se guardan en tu Drive y quedan dentro de esta sesión; no necesitas copiar nada. Máx. 300 MB por archivo.</p>
+  <div class="grid2"><div><div class="drop" data-dest="paso">📽️ <b>A la presentación</b><div class="small mut">Se verán como diapositivas dentro de la clase</div></div></div><div><div class="drop" data-dest="mat">📚 <b>Al material y videos</b><div class="small mut">Los estudiantes lo ven cuando quieran</div></div></div></div>
+  <input type="file" id="fi" multiple hidden accept=".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.m4v,.mp3"><div id="upm"></div>
+  <div class="hint">Canva: en Canva usa Compartir → «Ver» → copia el enlace y pégalo en un paso «Archivo / Canva / video incrustado» (botón «＋ Archivo o enlace»).</div></div>
   <h3>Material y videos <button class="btn sm ghost" id="am">＋</button></h3><div id="mats">${e.material.map(matForm).join('')}</div>
   <h3 style="margin-top:18px">Presentación y actividades <span class="mut small">(diapositivas, preguntas)</span></h3><div id="pasos">${e.pasos.map(pasoForm).join('')}</div>
-  <div class="row"><button class="btn sm" id="ap_">＋ Diapositiva</button><button class="btn sm" id="aq">＋ Actividad</button></div>`;
+  <div class="row"><button class="btn sm" id="ap_">＋ Diapositiva</button><button class="btn sm" id="ad">＋ Archivo o enlace</button><button class="btn sm" id="aq">＋ Actividad</button></div>`;
   const rep = () => { e.titulo = $('[data-k="titulo"]').value; };
   const refrescar = () => { e.pasos = leerPasos(); e.material = leerMat(); const sc = scrollY; editor(); scrollTo(0, sc); };
   $('#bk').onclick = () => { T.edit = null; vSes(); };
   $('#am').onclick = () => { e.pasos = leerPasos(); e.material = [...leerMat(), { tipo: 'video', titulo: '', url: '', descripcion: '' }]; copiarCab(); editor(); };
   $('#ap_').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'diapositiva', titulo: '', texto: '' }]; e.material = leerMat(); copiarCab(); editor(); };
+  $('#ad').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'documento', titulo: '', url: '' }]; e.material = leerMat(); copiarCab(); editor(); };
+  let destino = 'paso';
+  $$('.drop').forEach(d => { d.onclick = () => { destino = d.dataset.dest; $('#fi').click(); }; d.ondragover = ev => { ev.preventDefault(); d.classList.add('on'); }; d.ondragleave = () => d.classList.remove('on'); d.ondrop = ev => { ev.preventDefault(); d.classList.remove('on'); destino = d.dataset.dest; subir([...ev.dataTransfer.files]); }; });
+  $('#fi').onchange = ev => { subir([...ev.target.files]); ev.target.value = ''; };
+  async function subir(files) {
+    const box = $('#upm'); const nuevosP = [], nuevosM = [];
+    for (const f of files) {
+      const row = document.createElement('div'); row.className = 'upl'; row.innerHTML = `<span>${esc(f.name)}</span><div class="bar"><i style="width:0"></i></div><b>0%</b>`; box.appendChild(row);
+      try {
+        const r = await subirArchivo(f, p => { $('i', row).style.width = p * 100 + '%'; $('b', row).textContent = Math.round(p * 100) + '%'; });
+        const nombre = f.name.replace(/\.[^.]+$/, ''); $('b', row).textContent = '✅';
+        if (destino === 'paso') nuevosP.push({ id: 'd' + Date.now().toString(36) + nuevosP.length, tipo: 'documento', titulo: nombre, driveId: r.id, mime: r.mime });
+        else nuevosM.push({ tipo: (r.mime || '').startsWith('video/') ? 'video' : 'documento', titulo: nombre, driveId: r.id, mime: r.mime, url: '', descripcion: '' });
+      } catch (er) { row.innerHTML = `<span class="err" style="margin:0">${esc(f.name)}: ${esc(er.message)}</span>`; if (er.code === 'SESION_EXPIRADA') return manejar(er); }
+    }
+    if (!nuevosP.length && !nuevosM.length) return;
+    e.pasos = [...leerPasos(), ...nuevosP]; e.material = [...leerMat(), ...nuevosM]; copiarCab(); editor(); toast('Archivos agregados. Recuerda pulsar «Guardar».', 5000);
+  }
   $('#aq').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'opcion', pregunta: '', opciones: ['', '', '', ''], correcta: 0, puntos: 1 }]; e.material = leerMat(); copiarCab(); editor(); };
   function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
   $('#pasos').onchange = ev => { if (ev.target.dataset.k === 'tipo') { const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); ps[i] = { id: ps[i].id, tipo: ps[i].tipo, titulo: ps[i].titulo, texto: ps[i].texto, pregunta: ps[i].pregunta, puntos: ps[i].puntos || 1, opciones: ['', '', '', ''], correcta: ps[i].tipo === 'vf' ? 'V' : 0, campos: ['Tu respuesta'] }; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); } };
@@ -228,7 +277,7 @@ function editor() {
     try { const { id } = await API.call('docGuardarSesion', { sesion: e }); T.sesiones = (await API.call('docSesiones')).sesiones; T.sel = T.sel || id; T.edit = null; toast('Sesión guardada ✅'); vSes(); } catch (er) { manejar(er); b.disabled = false; }
   };
 }
-function matForm(m, i) { return `<div class="paso-ed mat"><div class="row"><select class="mt" style="max-width:160px">${['video', 'documento', 'enlace'].map(t => `<option ${m.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select><input class="mti" placeholder="Título" value="${esc(m.titulo)}" style="flex:1;min-width:160px"><button class="btn sm ghost" data-rm="${i}">✕</button></div><input class="mu" placeholder="URL (YouTube, Drive, PDF en el repositorio…)" value="${esc(m.url)}" style="margin-top:8px"><input class="md" placeholder="Descripción (opcional)" value="${esc(m.descripcion || '')}" style="margin-top:8px"></div>`; }
+function matForm(m, i) { return `<div class="paso-ed mat" data-did="${esc(m.driveId || '')}" data-mime="${esc(m.mime || '')}">${m.driveId ? '<span class="chip ok">📎 Archivo subido a tu Drive</span>' : ''}<div class="row"><select class="mt" style="max-width:160px">${['video', 'documento', 'enlace'].map(t => `<option ${m.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select><input class="mti" placeholder="Título" value="${esc(m.titulo)}" style="flex:1;min-width:160px"><button class="btn sm ghost" data-rm="${i}">✕</button></div><input class="mu" placeholder="URL (YouTube, Drive, PDF en el repositorio…)" value="${esc(m.url)}" style="margin-top:8px"><input class="md" placeholder="Descripción (opcional)" value="${esc(m.descripcion || '')}" style="margin-top:8px"></div>`; }
 
 /* ---------- INFORMES ---------- */
 async function vInf() {

@@ -1,17 +1,26 @@
 /* Aplicación del estudiante */
 const App = $('#app');
-const S = { cfg: null, perfil: null, sesiones: [], progreso: null, ses: null, idx: 0, hb: null, poll: null, enPart: false, bloqueado: false, ritmoDoc: false, pasoDoc: 0 };
+const esAct = p => p.tipo !== 'diapositiva' && p.tipo !== 'documento';
+/* Sin ventanas emergentes: la app nunca abre pop-ups ni pestañas nuevas por sí sola */
+window.open = () => null;
+let instalarEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalarEvt = e; const b = $('#instalar'); if (b) b.style.display = ''; });
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+const S = { previa: false, cfg: null, perfil: null, sesiones: [], progreso: null, ses: null, idx: 0, hb: null, poll: null, enPart: false, bloqueado: false, ritmoDoc: false, pasoDoc: 0 };
 const params = new URLSearchParams(location.search);
 const sesionQR = params.get('s');
 
-function hero(titulo, sub, extra = '') {
-  return `<div class="hero"><div class="in"><div class="brand"><span class="dot">$</span>${esc(S.cfg?.asignatura || 'Economía y Sociedad')} · ${esc(S.cfg?.nombre_unidad || 'Unidad 4')}</div><h1>${titulo}</h1><p>${sub}</p>${extra}</div></div>`;
+function banner() { return S.previa ? `<div class="previa"><span>👁 Vista previa del docente: lo que ves es lo que ven los estudiantes. No se guarda nada.</span><span class="sp"></span><button class="btn sm navy" onclick="window.close();location.href='docente.html'">Cerrar</button></div>` : ''; }
+function hero(titulo, sub, extra = '', big = false) {
+  return `${banner()}<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo ${big ? 'big' : ''}" src="img/insignia.png" alt="Insignia Colegio Marina de Chile"><div class="brand">Colegio Marina de Chile<small>${esc(S.cfg?.asignatura || 'Economía y Sociedad')} · ${esc(S.cfg?.nombre_unidad || 'Unidad 4')}</small></div></div><h1>${titulo}</h1><p>${sub}</p>${extra}</div></div>`;
 }
-function cargando(t = 'Cargando…') { App.innerHTML = `<div class="c" style="padding:90px 20px"><span class="spin"></span><p class="mut">${t}</p></div>`; }
+function cargando(t = 'Cargando…') { App.innerHTML = `<div class="c" style="padding:90px 20px"><img src="img/insignia.png" class="logo-load" alt=""><p class="mut">${t}</p></div>`; }
 
 async function iniciar() {
   try { S.cfg = await API.call('config'); } catch (e) { App.innerHTML = `<div class="wrap"><div class="card err" style="margin-top:40px">${esc(e.message)}</div></div>`; return; }
   document.title = `${S.cfg.asignatura} · ${S.cfg.nombre_unidad}`;
+  const tp = params.get('previa');
+  if (tp) { S.previa = true; API.token = tp; S.perfil = { rut: 'PREVIA', nombre: 'Vista previa', curso: 'Docente' }; return inicio(); }
   const t = store.get('tok'), p = store.get('perfil');
   if (t && p) { API.token = t; S.perfil = JSON.parse(p); return inicio(); }
   vistaAuth();
@@ -19,7 +28,7 @@ async function iniciar() {
 
 /* ---------- Inscripción / ingreso ---------- */
 function vistaAuth() {
-  App.innerHTML = `${hero('¡Bienvenido/a!', 'Participa en clases desde tu celular.')}
+  App.innerHTML = `${hero('¡Bienvenido/a!', 'Participa en clases de Economía desde tu celular.', '', true)}
   <div class="wrap pull"><div class="card">
     <form id="f" autocomplete="off">
       <label for="rut">Ingresa con tu RUT</label><input id="rut" inputmode="text" placeholder="12.345.678-9" required autofocus>
@@ -50,12 +59,20 @@ async function inicio() {
   <div class="stats"><div><b>${p.pct_logro}%</b>Logro</div><div><b>${p.nota === null ? '—' : String(p.nota).replace('.', ',')}</b>Nota ref.</div><div><b style="font-size:.95rem;padding-top:3px">${esc(p.nivel)}</b>Nivel</div></div>`;
   App.innerHTML = `${hero('Hola, ' + esc(S.perfil.nombre.split(' ')[0]) + ' 👋', esc(S.perfil.curso) + ' · ' + esc(S.perfil.rut), ring)}
   <div class="wrap pull">
-    <div class="row noprint" style="margin-bottom:10px;justify-content:flex-end"><button class="btn sm ghost" id="inf">📄 Mi informe</button><button class="btn sm ghost" id="out">Salir</button></div>
+    <div class="card instalar noprint" id="instalar" style="display:none"><img src="img/icon-192.png" alt=""><div class="sp"><b>Instala «Clases de Economía»</b><div class="small mut">Tendrás el ícono en tu pantalla y se abrirá a pantalla completa.</div></div><button class="btn sm gold" id="ins">Instalar</button></div>
+    <div class="card instalar noprint" id="iosins" style="display:none"><img src="img/icon-192.png" alt=""><div class="sp small"><b>Para instalar en iPhone:</b> toca <b>Compartir</b> ⬆️ y luego <b>«Agregar a pantalla de inicio»</b>.</div></div>
+    <div class="row noprint" style="margin-bottom:10px;justify-content:flex-end"><button class="btn sm ghost" id="inf">📄 Mi informe</button>${S.previa ? '' : '<button class="btn sm ghost" id="out">Salir</button>'}</div>
     <h2 style="margin-top:6px">Sesiones</h2>
     ${S.sesiones.length ? S.sesiones.map(tarjetaSesion).join('') : '<div class="card c mut">Aún no hay sesiones publicadas.</div>'}
   </div>`;
   $$('.ses').forEach(b => b.onclick = () => verSesion(b.dataset.id));
-  $('#out').onclick = cerrarSesion;
+  if ($('#out')) $('#out').onclick = cerrarSesion;
+  const standalone = matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (!standalone && !S.previa) {
+    if (instalarEvt) $('#instalar').style.display = '';
+    else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) $('#iosins').style.display = '';
+    $('#ins').onclick = async () => { if (instalarEvt) { instalarEvt.prompt(); await instalarEvt.userChoice; instalarEvt = null; $('#instalar').style.display = 'none'; } };
+  }
   $('#inf').onclick = async ev => { ev.target.disabled = true; try { const d = await API.call('miInforme'); descargarBase64(d.nombre, d.base64); } catch (e) { toast(e.message, 4500); } ev.target.disabled = false; };
   if (sesionQR && S.sesiones.some(s => s.id === sesionQR)) { const q = sesionQR; history.replaceState(null, '', location.pathname); verSesion(q); }
 }
@@ -74,16 +91,16 @@ async function verSesion(id) {
   pintarSesion('part');
 }
 function pintarSesion(tab) {
-  const s = S.ses; const r = s.respuestas || {}; const acts = s.pasos.filter(p => p.tipo !== 'diapositiva');
+  const s = S.ses; const r = s.respuestas || {}; const acts = s.pasos.filter(esAct);
   const hechas = acts.filter(p => r[p.id]).length;
   let cuerpo = '';
   if (tab === 'mat') {
     cuerpo = s.material.length ? s.material.map(m => {
-      const emb = m.tipo === 'video' ? ytEmbed(m.url) : '';
+      const ab = urlAbrir(m);
       return `<div class="card"><div class="row"><span style="font-size:1.4rem">${m.tipo === 'video' ? '🎬' : m.tipo === 'enlace' ? '🔗' : '📄'}</span><b>${esc(m.titulo)}</b></div>
       ${m.descripcion ? `<p class="small mut">${esc(m.descripcion)}</p>` : ''}
-      ${emb ? `<div class="video"><iframe src="${emb}" allowfullscreen loading="lazy"></iframe></div>` : ''}
-      ${m.url ? `<a class="btn sm ghost" style="margin-top:10px" href="${esc(m.url)}" target="_blank" rel="noopener">Abrir ${m.tipo === 'video' ? 'en YouTube' : 'material'}</a>` : '<div class="small mut">El docente aún no publica este enlace.</div>'}</div>`;
+      ${bloqueEmbed(m)}
+      ${ab ? `<a class="btn sm ghost" style="margin-top:10px" href="${esc(ab)}" target="_blank" rel="noopener">Abrir en pantalla aparte</a>` : '<div class="small mut">El docente aún no publica este enlace.</div>'}</div>`;
     }).join('') : '<div class="card c mut">No hay material para esta sesión.</div>';
   } else if (tab === 'res') {
     cuerpo = acts.map(p => {
@@ -101,7 +118,7 @@ function pintarSesion(tab) {
         <button class="btn block" id="ent">${hechas ? 'Continuar participando' : 'Entrar a participar'} →</button>`
         : `<div class="info">${s.estado === 'cerrada' ? 'El plazo terminó: ya no puedes responder actividades, pero puedes revisar el material y tus resultados.' : 'Esta sesión aún no se abre.'}</div>`}`;
   }
-  App.innerHTML = `<div class="hero"><div class="in"><button class="btn sm ghost" id="back" style="color:#fff;border-color:rgba(255,255,255,.4)">← Volver</button><h1>Sesión ${s.numero}</h1><p>${esc(s.titulo)}</p></div></div>
+  App.innerHTML = `${banner()}<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="sp"><div class="brand">Colegio Marina de Chile<small>Clases de Economía</small></div></div><button class="btn sm ghost" id="back" style="color:#fff;border-color:rgba(255,255,255,.4)">← Volver</button></div><h1>Sesión ${s.numero}</h1><p>${esc(s.titulo)}</p></div></div>
   <div class="wrap pull"><div class="tabs"><button class="tab ${tab === 'part' ? 'on' : ''}" data-t="part">Participar</button><button class="tab ${tab === 'mat' ? 'on' : ''}" data-t="mat">Material y videos</button><button class="tab ${tab === 'res' ? 'on' : ''}" data-t="res">Mis resultados</button></div>${cuerpo}</div>`;
   $('#back').onclick = inicio; $$('.tab').forEach(b => b.onclick = () => pintarSesion(b.dataset.t));
   if ($('#ent')) $('#ent').onclick = () => entrarPart();
@@ -115,10 +132,11 @@ async function entrarPart() {
     const d = await API.call('entrar', { sesion: s.id });
     try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { }
     S.enPart = true; S.bloqueado = d.estado === 'bloqueado'; S.ritmoDoc = d.ritmo === 'docente'; S.pasoDoc = d.paso_actual;
-    const primero = s.pasos.findIndex(p => p.tipo !== 'diapositiva' && !s.respuestas[p.id]);
+    const primero = s.pasos.findIndex(p => esAct(p) && !s.respuestas[p.id]);
     S.idx = S.ritmoDoc ? Math.min(d.paso_actual, s.pasos.length - 1) : Math.max(0, Math.min(S.idx, s.pasos.length - 1));
     if (!S.ritmoDoc && S.idx === 0 && primero > 0 && Object.keys(s.respuestas).length) S.idx = primero;
     document.addEventListener('visibilitychange', alVisibilidad); window.addEventListener('pagehide', alSalirPagina); window.addEventListener('beforeunload', antesDeCerrar);
+    document.addEventListener('fullscreenchange', alPantalla); document.addEventListener('click', bloquearEnlaces, true); document.addEventListener('contextmenu', bloquearMenu);
     S.hb = setInterval(latir, 15000);
     if (S.bloqueado) return pintarBloqueo(); pintarPaso();
   } catch (e) { if (!manejar(e)) { toast(e.message, 4500); b.disabled = false; } }
@@ -126,7 +144,20 @@ async function entrarPart() {
 function detenerPart() {
   S.enPart = false; clearInterval(S.hb); clearInterval(S.poll);
   document.removeEventListener('visibilitychange', alVisibilidad); window.removeEventListener('pagehide', alSalirPagina); window.removeEventListener('beforeunload', antesDeCerrar);
-  try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) { }
+  document.removeEventListener('fullscreenchange', alPantalla); document.removeEventListener('click', bloquearEnlaces, true); document.removeEventListener('contextmenu', bloquearMenu);
+  const f = $('.lock.fsw'); if (f) f.remove(); const pt = $('.part'); if (pt) pt.remove();
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) { }   // al terminar, vuelve a la pantalla normal
+}
+/* Durante la participación: sin pestañas nuevas, sin menú contextual y con pantalla completa */
+function bloquearEnlaces(e) { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a && S.enPart && !S.bloqueado) { e.preventDefault(); e.stopPropagation(); toast('Durante la actividad no puedes abrir otras ventanas.'); } }
+function bloquearMenu(e) { if (S.enPart) e.preventDefault(); }
+function alPantalla() {
+  if (!S.enPart || S.bloqueado || document.fullscreenElement || !document.documentElement.requestFullscreen || S.previa) return;
+  if ($('.lock.fsw')) return;
+  const o = document.createElement('div'); o.className = 'lock fsw';
+  o.innerHTML = '<div class="box"><img src="img/insignia.png" width="84" alt=""><h2 style="margin-top:12px">Pantalla completa</h2><p>Para seguir participando, vuelve a pantalla completa.</p><button class="btn gold block" id="fsb">Volver a pantalla completa</button></div>';
+  document.body.appendChild(o);
+  $('#fsb').onclick = async () => { try { await document.documentElement.requestFullscreen(); } catch (e) { } o.remove(); };
 }
 function antesDeCerrar(e) { if (S.enPart && !S.bloqueado && S.ses.bloqueo === 'SI') { e.preventDefault(); e.returnValue = ''; } }
 function marcarSalida(motivo) {
@@ -169,18 +200,19 @@ async function finalizarPart() { detenerPart(); const o = $('.lock'); if (o) o.r
 function pintarPaso() {
   const s = S.ses; const p = s.pasos[S.idx]; const n = s.pasos.length; const lim = S.ritmoDoc ? S.pasoDoc : n - 1;
   let html = '';
-  if (p.tipo === 'diapositiva') html = `<div class="card slide"><h2>${esc(p.titulo)}</h2>${md(p.texto)}${p.imagen ? `<img src="${esc(p.imagen)}" alt="" style="max-width:100%;border-radius:12px;margin-top:10px">` : ''}</div>`;
+  if (p.tipo === 'documento') html = `<div class="card slide"><h2>${esc(p.titulo || 'Material')}</h2>${p.texto ? md(p.texto) : ''}${bloqueEmbed(p) || `<a class="btn" href="${esc(urlAbrir(p))}" target="_blank" rel="noopener">Abrir material</a>`}</div>`;
+  else if (p.tipo === 'diapositiva') html = `<div class="card slide"><h2>${esc(p.titulo)}</h2>${md(p.texto)}${p.imagen ? `<img src="${esc(p.imagen)}" alt="" style="max-width:100%;border-radius:12px;margin-top:10px">` : ''}</div>`;
   else html = `<div class="card">${cuerpoActividad(p)}</div>`;
   const prev = document.querySelector('.part'); if (prev) prev.remove();
   const w = document.createElement('div'); w.className = 'part';
-  w.innerHTML = `<div class="top"><div class="row"><span class="live"></span><b class="sp small">Sesión ${s.numero} · ${S.idx + 1}/${n}</b>${S.ritmoDoc ? '<span class="chip navy">Guiado por el docente</span>' : ''}<button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div><div class="bar" style="margin-top:8px;background:rgba(255,255,255,.2)"><i style="width:${(S.idx + 1) / n * 100}%"></i></div></div>
+  w.innerHTML = `<div class="top"><div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><b class="sp small">Sesión ${s.numero} · ${S.idx + 1}/${n}</b>${S.ritmoDoc ? '<span class="chip navy">Guiado por el docente</span>' : ''}<button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div><div class="bar" style="margin-top:8px;background:rgba(255,255,255,.2)"><i style="width:${(S.idx + 1) / n * 100}%"></i></div></div>
   <div class="body">${html}${S.ritmoDoc && S.idx >= S.pasoDoc && S.idx < n - 1 ? '<p class="c mut small">⏳ Espera: tu docente avanzará a la siguiente diapositiva.</p>' : ''}</div>
   <div class="foot"><button class="btn ghost" id="ant" ${S.idx === 0 ? 'disabled' : ''}>← Anterior</button><span class="sp"></span><button class="btn" id="sig" ${S.idx >= lim ? 'disabled' : ''}>Siguiente →</button></div>`;
   document.body.appendChild(w);
   $('#ant').onclick = () => { S.idx--; pintarPaso(); }; $('#sig').onclick = () => { S.idx++; pintarPaso(); };
   $('#sal').onclick = async () => { if (confirm('¿Terminar tu participación en esta sesión? Podrás volver mientras el plazo esté abierto.')) { await API.call('salir', { sesion: s.id, motivo: 'terminó voluntariamente' }).catch(() => { }); S.bloqueado = false;
     API.call('enviarCopia', { sesion: s.id, auto: true }).then(d => { if (d.estado === 'enviado') toast('📧 Te enviamos una copia de tus actividades a tu correo institucional.', 5000); }).catch(() => { }); detenerPart(); w.remove(); const l = $('.lock'); if (l) l.remove(); verSesion(s.id); } };
-  if (p.tipo !== 'diapositiva') enlazarActividad(p);
+  if (esAct(p)) enlazarActividad(p);
 }
 
 function cuerpoActividad(p) {

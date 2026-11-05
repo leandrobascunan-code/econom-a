@@ -58,6 +58,22 @@ function ytEmbed(url) {
   const m = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/.exec(url || '');
   return m ? 'https://www.youtube-nocookie.com/embed/' + m[1] : '';
 }
+/** Convierte un enlace o un archivo de Drive en una dirección incrustable (solo sitios permitidos). */
+function embedInfo(m) {
+  if (m.driveId) { const mi = m.mime || ''; return { src: 'https://drive.google.com/file/d/' + m.driveId + '/preview', video: mi.startsWith('video/') }; }
+  const u = String(m.url || ''); let x;
+  if ((x = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/.exec(u))) return { src: 'https://www.youtube-nocookie.com/embed/' + x[1], video: true };
+  if ((x = /drive\.google\.com\/file\/d\/([\w-]+)/.exec(u))) return { src: 'https://drive.google.com/file/d/' + x[1] + '/preview' };
+  if ((x = /docs\.google\.com\/(presentation|document|spreadsheets)\/d\/([\w-]+)/.exec(u))) return { src: 'https://docs.google.com/' + x[1] + '/d/' + x[2] + (x[1] === 'presentation' ? '/embed?start=false&loop=false' : '/preview') };
+  if (/^https:\/\/(www\.)?canva\.com\/design\//.test(u)) return { src: u.split('?')[0].replace(/\/(edit|watch)$/, '/view') + '?embed' };
+  if ((x = /vimeo\.com\/(\d+)/.exec(u))) return { src: 'https://player.vimeo.com/video/' + x[1], video: true };
+  return null;
+}
+function bloqueEmbed(m) {
+  const e = embedInfo(m); if (!e) return '';
+  return `<div class="doc ${e.video ? 'v' : ''}"><iframe src="${esc(e.src)}" allow="fullscreen; autoplay; encrypted-media" allowfullscreen loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
+}
+function urlAbrir(m) { return m.driveId ? 'https://drive.google.com/file/d/' + m.driveId + '/view' : (m.url || ''); }
 function descargarBase64(nombre, b64, tipo = 'application/pdf') {
   const bin = atob(b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
   const url = URL.createObjectURL(new Blob([a], { type: tipo }));
