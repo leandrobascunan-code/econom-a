@@ -1,4 +1,4 @@
-/* Aplicación del estudiante */
+﻿/* Aplicación del estudiante */
 const App = $('#app');
 const esAct = p => p.tipo !== 'diapositiva' && p.tipo !== 'documento';
 /* Sin ventanas emergentes: la app nunca abre pop-ups ni pestañas nuevas por sí sola */
@@ -57,7 +57,7 @@ async function inicio() {
   const p = S.progreso;
   const ring = `<div class="row" style="margin-top:18px;gap:16px"><div class="ring" style="--p:${p.pct_avance}"><b>${p.pct_avance}%</b></div><div class="sp"><div style="font:600 1rem Poppins">Tu progreso en la unidad</div><div class="small" style="opacity:.85">${p.completadas} de ${p.total} sesiones completadas</div></div></div>
   <div class="stats"><div><b>${p.pct_logro}%</b>Logro</div><div><b>${p.nota === null ? '—' : String(p.nota).replace('.', ',')}</b>Nota ref.</div><div><b style="font-size:.95rem;padding-top:3px">${esc(p.nivel)}</b>Nivel</div></div>`;
-  App.innerHTML = `${hero('Hola, ' + esc(S.perfil.nombre.split(' ')[0]) + ' 👋', esc(S.perfil.curso) + ' · ' + esc(S.perfil.rut), ring)}
+  App.innerHTML = `${hero('Hola, ' + esc(S.perfil.nombre.split(' ')[0]) + ' 👋', esc(S.perfil.curso) + ' · <span class="alias">🎮 Tu usuario: ' + esc(S.perfil.alias || '—') + '</span>', ring)}
   <div class="wrap pull">
     <div class="card instalar noprint" id="instalar" style="display:none"><img src="img/icon-192.png" alt=""><div class="sp"><b>Instala «Clases de Economía»</b><div class="small mut">Tendrás el ícono en tu pantalla y se abrirá a pantalla completa.</div></div><button class="btn sm gold" id="ins">Instalar</button></div>
     <div class="card instalar noprint" id="iosins" style="display:none"><img src="img/icon-192.png" alt=""><div class="sp small"><b>Para instalar en iPhone:</b> toca <b>Compartir</b> ⬆️ y luego <b>«Agregar a pantalla de inicio»</b>.</div></div>
@@ -126,23 +126,26 @@ function pintarSesion(tab) {
 }
 
 /* ---------- Modo participación ---------- */
+function setVivo(d) { S.vivo = { paso: d.paso ?? d.paso_actual ?? 0, fase: d.fase || 'diapositiva', t: d.t || 0, dur: d.dur || 20, retro: d.retro || '', off: (d.ahora || Date.now()) - Date.now() }; }
+const claveVivo = v => v.paso + '|' + v.fase + '|' + v.retro;
 async function entrarPart() {
   const s = S.ses; const b = $('#ent'); b.disabled = true;
   try {
     const d = await API.call('entrar', { sesion: s.id });
     try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { }
-    S.enPart = true; S.bloqueado = d.estado === 'bloqueado'; S.ritmoDoc = d.ritmo === 'docente'; S.pasoDoc = d.paso_actual;
+    S.enPart = true; S.bloqueado = d.estado === 'bloqueado'; S.ritmoDoc = d.ritmo === 'docente'; setVivo(d);
     const primero = s.pasos.findIndex(p => esAct(p) && !s.respuestas[p.id]);
-    S.idx = S.ritmoDoc ? Math.min(d.paso_actual, s.pasos.length - 1) : Math.max(0, Math.min(S.idx, s.pasos.length - 1));
+    S.idx = Math.max(0, Math.min(S.idx, s.pasos.length - 1));
     if (!S.ritmoDoc && S.idx === 0 && primero > 0 && Object.keys(s.respuestas).length) S.idx = primero;
     document.addEventListener('visibilitychange', alVisibilidad); window.addEventListener('pagehide', alSalirPagina); window.addEventListener('beforeunload', antesDeCerrar);
     document.addEventListener('fullscreenchange', alPantalla); document.addEventListener('click', bloquearEnlaces, true); document.addEventListener('contextmenu', bloquearMenu);
-    S.hb = setInterval(latir, 15000);
+    programarLatido();
     if (S.bloqueado) return pintarBloqueo(); pintarPaso();
   } catch (e) { if (!manejar(e)) { toast(e.message, 4500); b.disabled = false; } }
 }
+function programarLatido() { clearTimeout(S.hb); S.hb = setTimeout(async () => { await latir(); if (S.enPart) programarLatido(); }, S.ritmoDoc ? 3000 : 15000); }
 function detenerPart() {
-  S.enPart = false; clearInterval(S.hb); clearInterval(S.poll);
+  S.enPart = false; clearTimeout(S.hb); clearInterval(S.poll); clearInterval(S.tick);
   document.removeEventListener('visibilitychange', alVisibilidad); window.removeEventListener('pagehide', alSalirPagina); window.removeEventListener('beforeunload', antesDeCerrar);
   document.removeEventListener('fullscreenchange', alPantalla); document.removeEventListener('click', bloquearEnlaces, true); document.removeEventListener('contextmenu', bloquearMenu);
   const f = $('.lock.fsw'); if (f) f.remove(); const pt = $('.part'); if (pt) pt.remove();
@@ -175,8 +178,9 @@ async function latir() {
     const d = await API.call('latido', { sesion: S.ses.id });
     if (d.estado === 'bloqueado') { S.bloqueado = true; return pintarBloqueo(); }
     if (d.cerrada) { toast('El plazo de la sesión terminó.'); return finalizarPart(); }
-    if (d.ritmo === 'docente' && (d.paso_actual !== S.pasoDoc || !S.ritmoDoc)) { const avanzo = d.paso_actual !== S.pasoDoc; S.ritmoDoc = true; S.pasoDoc = d.paso_actual; if (avanzo) { S.idx = d.paso_actual; pintarPaso(); } }
-    else if (d.ritmo !== 'docente' && S.ritmoDoc) { S.ritmoDoc = false; pintarPaso(); }
+    const antes = S.vivo ? claveVivo(S.vivo) : ''; const era = S.ritmoDoc; S.ritmoDoc = d.ritmo === 'docente'; setVivo(d);
+    if (S.ritmoDoc && (claveVivo(S.vivo) !== antes || !era)) pintarPaso();
+    else if (!S.ritmoDoc && era) pintarPaso();
   } catch (e) { if (e.code === 'SESION_EXPIRADA') manejar(e); }
 }
 function pintarBloqueo() {
@@ -190,52 +194,118 @@ function pintarBloqueo() {
     try {
       const d = await API.call('latido', { sesion: S.ses.id });
       if (d.cerrada) { ov.remove(); clearInterval(S.poll); toast('El plazo terminó.'); return finalizarPart(); }
-      if (d.estado === 'activo') { clearInterval(S.poll); S.bloqueado = false; ov.remove(); toast('✅ El docente te autorizó. ¡Sigue participando!'); try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => { }); } catch (e) { } pintarPaso(); }
+      if (d.estado === 'activo') { clearInterval(S.poll); S.bloqueado = false; ov.remove(); setVivo(d); S.ritmoDoc = d.ritmo === 'docente'; toast('✅ El docente te autorizó. ¡Sigue participando!'); try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => { }); } catch (e) { } pintarPaso(); }
     } catch (e) { manejar(e); }
   }, 4000);
 }
 async function finalizarPart() { detenerPart(); const o = $('.lock'); if (o) o.remove(); await verSesion(S.ses.id); }
+async function terminarPart() {
+  if (!confirm('¿Terminar tu participación en esta sesión? Podrás volver mientras el plazo esté abierto.')) return;
+  const s = S.ses;
+  await API.call('salir', { sesion: s.id, motivo: 'terminó voluntariamente' }).catch(() => { }); S.bloqueado = false;
+  API.call('enviarCopia', { sesion: s.id, auto: true }).then(d => { if (d.estado === 'enviado') toast('📧 Te enviamos una copia de tus actividades a tu correo institucional.', 5000); }).catch(() => { });
+  detenerPart(); const l = $('.lock'); if (l) l.remove(); verSesion(s.id);
+}
 
 /* ---------- Pasos ---------- */
-function pintarPaso() {
-  const s = S.ses; const p = s.pasos[S.idx]; const n = s.pasos.length; const lim = S.ritmoDoc ? S.pasoDoc : n - 1;
-  let html = '';
-  if (p.tipo === 'documento') html = `<div class="card slide"><h2>${esc(p.titulo || 'Material')}</h2>${p.texto ? md(p.texto) : ''}${bloqueEmbed(p) || `<a class="btn" href="${esc(urlAbrir(p))}" target="_blank" rel="noopener">Abrir material</a>`}</div>`;
-  else if (p.tipo === 'diapositiva') html = `<div class="card slide"><h2>${esc(p.titulo)}</h2>${md(p.texto)}${p.imagen ? `<img src="${esc(p.imagen)}" alt="" style="max-width:100%;border-radius:12px;margin-top:10px">` : ''}</div>`;
-  else html = `<div class="card">${cuerpoActividad(p)}</div>`;
+function slideHtml(p) {
+  if (p.tipo === 'documento') return `<div class="card slide"><h2>${esc(p.titulo || 'Material')}</h2>${p.texto ? md(p.texto) : ''}${bloqueEmbed(p) || `<a class="btn" href="${esc(urlAbrir(p))}" target="_blank" rel="noopener">Abrir material</a>`}</div>`;
+  return `<div class="card slide"><h2>${esc(p.titulo)}</h2>${md(p.texto)}${p.imagen ? `<img src="${esc(p.imagen)}" alt="" style="max-width:100%;border-radius:12px;margin-top:10px">` : ''}</div>`;
+}
+function montarPart(top, body, foot) {
   const prev = document.querySelector('.part'); if (prev) prev.remove();
   const w = document.createElement('div'); w.className = 'part';
-  w.innerHTML = `<div class="top"><div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><b class="sp small">Sesión ${s.numero} · ${S.idx + 1}/${n}</b>${S.ritmoDoc ? '<span class="chip navy">Guiado por el docente</span>' : ''}<button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div><div class="bar" style="margin-top:8px;background:rgba(255,255,255,.2)"><i style="width:${(S.idx + 1) / n * 100}%"></i></div></div>
-  <div class="body">${html}${S.ritmoDoc && S.idx >= S.pasoDoc && S.idx < n - 1 ? '<p class="c mut small">⏳ Espera: tu docente avanzará a la siguiente diapositiva.</p>' : ''}</div>
-  <div class="foot"><button class="btn ghost" id="ant" ${S.idx === 0 ? 'disabled' : ''}>← Anterior</button><span class="sp"></span><button class="btn" id="sig" ${S.idx >= lim ? 'disabled' : ''}>Siguiente →</button></div>`;
-  document.body.appendChild(w);
-  $('#ant').onclick = () => { S.idx--; pintarPaso(); }; $('#sig').onclick = () => { S.idx++; pintarPaso(); };
-  $('#sal').onclick = async () => { if (confirm('¿Terminar tu participación en esta sesión? Podrás volver mientras el plazo esté abierto.')) { await API.call('salir', { sesion: s.id, motivo: 'terminó voluntariamente' }).catch(() => { }); S.bloqueado = false;
-    API.call('enviarCopia', { sesion: s.id, auto: true }).then(d => { if (d.estado === 'enviado') toast('📧 Te enviamos una copia de tus actividades a tu correo institucional.', 5000); }).catch(() => { }); detenerPart(); w.remove(); const l = $('.lock'); if (l) l.remove(); verSesion(s.id); } };
+  w.innerHTML = `<div class="top">${top}</div><div class="body">${body}</div>${foot || ''}`; document.body.appendChild(w); return w;
+}
+function pintarPaso() {
+  if (S.ritmoDoc) return pintarVivo();
+  const s = S.ses; const p = s.pasos[S.idx]; const n = s.pasos.length;
+  const html = esAct(p) ? `<div class="card">${cuerpoActividad(p)}</div>` : slideHtml(p);
+  montarPart(`<div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><b class="sp small">Sesión ${s.numero} · ${S.idx + 1}/${n}</b><button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div><div class="bar" style="margin-top:8px;background:rgba(255,255,255,.2)"><i style="width:${(S.idx + 1) / n * 100}%"></i></div>`, html,
+    `<div class="foot"><button class="btn ghost" id="ant" ${S.idx === 0 ? 'disabled' : ''}>← Anterior</button><span class="sp"></span><button class="btn" id="sig" ${S.idx >= n - 1 ? 'disabled' : ''}>Siguiente →</button></div>`);
+  $('#ant').onclick = () => { S.idx--; pintarPaso(); }; $('#sig').onclick = () => { S.idx++; pintarPaso(); }; $('#sal').onclick = terminarPart;
   if (esAct(p)) enlazarActividad(p);
 }
 
-function cuerpoActividad(p) {
-  const r = S.ses.respuestas[p.id]; const hecho = !!r; const L = 'ABCDEFGH';
-  let h = `<div class="row"><span class="chip navy">${p.tipo === 'encuesta' ? 'Encuesta' : 'Actividad'}</span><span class="chip">${p.puntos} pt${p.puntos > 1 ? 's' : ''}</span></div><h3 style="margin-top:10px">${esc(p.pregunta)}</h3>`;
-  const corr = p.correcta;
-  if (p.tipo === 'opcion') {
-    h += p.opciones.map((o, i) => { let c = 'opt'; if (hecho) { if (i === corr) c += ' good'; else if (String(i) === String(r.respuesta)) c += ' wrong'; } return `<button class="${c}" data-i="${i}" ${hecho ? 'disabled' : ''}><span class="k">${L[i]}</span><span>${esc(o)}</span></button>`; }).join('');
-  } else if (p.tipo === 'vf') {
-    h += ['V', 'F'].map(v => { let c = 'opt'; if (hecho) { if (v === corr) c += ' good'; else if (v === r.respuesta) c += ' wrong'; } return `<button class="${c}" data-v="${v}" ${hecho ? 'disabled' : ''}><span class="k">${v}</span><span>${v === 'V' ? 'Verdadero' : 'Falso'}</span></button>`; }).join('');
-  } else if (p.tipo === 'numerica') {
-    h += `<input id="num" inputmode="decimal" placeholder="Escribe un número" value="${hecho ? esc(r.respuesta) : ''}" ${hecho ? 'disabled' : ''}>${hecho ? '' : '<button class="btn block" id="env" style="margin-top:12px">Responder</button>'}`;
-  } else if (p.tipo === 'encuesta') {
-    h += hecho ? '<div id="res"><div class="fb ok">✅ Respuesta registrada. ¡Gracias por participar!</div></div>' : p.opciones.map((o, i) => `<button class="opt" data-i="${i}"><span class="k">${L[i]}</span><span>${esc(o)}</span></button>`).join('');
+/* ---------- Modo en vivo (el docente guía: estilo Kahoot / Mentimeter) ---------- */
+function pintarVivo() {
+  const s = S.ses, v = S.vivo, p = s.pasos[v.paso]; if (!p) return;
+  clearInterval(S.tick);
+  const acts = s.pasos.filter(esAct); const act = esAct(p); const nAct = acts.indexOf(p) + 1; const r = s.respuestas[p.id];
+  let body = '', timer = '';
+  if (!act) body = slideHtml(p) + '<p class="c mut small" style="margin-top:12px">📺 Sigue la clase: tu docente avanzará.</p>';
+  else if (v.fase === 'espera') body = `<div class="card c big-msg"><div class="emoji">🎯</div><h2>Pregunta ${nAct} de ${acts.length}</h2><p class="mut">¡Prepárate! Tu docente la lanzará en un momento…</p></div>`;
+  else if (v.fase === 'pregunta') {
+    timer = '<div class="timer"><i id="tbar"></i><b id="tnum"></b></div>';
+    body = r ? '<div class="card c big-msg"><div class="emoji">✅</div><h2>¡Respuesta enviada!</h2><p class="mut">Espera los resultados…</p></div>' : `<div class="card">${cuerpoActividad(p)}</div>`;
+  } else body = '<div id="vres"><div class="c"><span class="spin"></span></div></div>';
+  montarPart(`<div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><span class="alias sp">${esc(S.perfil.alias || 'Participante')}</span><span class="chip navy">En vivo</span><button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div>${timer}`, body);
+  $('#sal').onclick = terminarPart;
+  if (act && v.fase === 'pregunta') {
+    const tic = () => {
+      const left = v.t + v.dur * 1000 - (Date.now() + v.off); const f = Math.max(0, left / (v.dur * 1000));
+      const b = $('#tbar'), n = $('#tnum'); if (b) b.style.width = f * 100 + '%'; if (n) n.textContent = Math.max(0, Math.ceil(left / 1000));
+      if (left <= 0) { clearInterval(S.tick); if (S.vivo === v && S.enPart) { v.fase = 'cerrada'; pintarVivo(); } }
+    };
+    tic(); S.tick = setInterval(tic, 250);
+    if (!r) enlazarActividad(p);
+  }
+  if (act && ['cerrada', 'resultados', 'ranking'].includes(v.fase)) cargarResultados(p, claveVivo(v));
+}
+async function cargarResultados(p, clave, intento = 0) {
+  let d; try { d = await API.call('vivoResultados', { sesion: S.ses.id }); } catch (e) { return; }
+  if (!S.vivo || claveVivo(S.vivo) !== clave) return; const box = $('#vres'); if (!box) return;
+  const v = S.vivo; let h = '';
+  if (v.fase === 'ranking') {
+    h = `<div class="card"><h2 class="c">🏆 Ranking</h2>${podioHtml(d.top, S.perfil.alias)}<p class="c" style="margin-top:12px">${d.miPos ? `Tu puesto: <b>#${d.miPos}</b> de ${d.total} · <b>${d.miPts}</b> puntos` : 'Aún no tienes puntos en esta sesión.'}</p></div>`;
   } else {
+    h = miResultadoHtml(p, d) + (v.fase === 'resultados' ? `<div class="card">${aggHtml(p, d.agregado, d.correcta)}</div>` : '');
+  }
+  if (d.retro) h += `<div class="card retro"><b>🧑‍🏫 Retroalimentación para el curso</b><p>${md(d.retro)}</p></div>`;
+  box.innerHTML = h;
+  if (p.tipo === 'abierta' && d.mi && d.mi.puntaje === null && intento < 30) setTimeout(() => cargarResultados(p, clave, intento + 1), 4000);
+}
+function miResultadoHtml(p, d) {
+  const m = d.mi;
+  if (!m) return '<div class="card c big-msg"><div class="emoji">⏱</div><h2>No alcanzaste a responder</h2><p class="mut">¡La próxima vas con todo!</p></div>';
+  if (['opcion', 'vf', 'numerica'].includes(p.tipo)) {
+    const ok = m.puntaje > 0; const corr = p.tipo === 'opcion' ? 'ABCDEFGH'[d.correcta] + '. ' + (p.opciones || [])[d.correcta] : p.tipo === 'vf' ? (d.correcta === 'V' ? 'Verdadero' : 'Falso') : d.correcta;
+    return `<div class="card c big-msg ${ok ? 'okc' : 'badc'}"><div class="emoji">${ok ? '🎉' : '😅'}</div><h2>${ok ? '¡Correcto!' : 'Incorrecto'}</h2>${ok ? `<p class="pts">+${m.juego || 0} puntos</p>` : `<p>La respuesta correcta era: <b>${esc(corr)}</b></p>`}${d.explicacion ? `<p class="small">${esc(d.explicacion)}</p>` : ''}</div>`;
+  }
+  if (p.tipo === 'abierta') return m.puntaje === null ? '<div class="card c big-msg"><div class="emoji">📝</div><h2>Respuesta enviada</h2><p class="mut">Tu retroalimentación individual aparecerá aquí.</p></div>' : `<div class="card okc"><h3>Tu retroalimentación</h3><p>Puntaje: <b>${m.puntaje}/${p.puntos}</b></p>${m.comentario ? `<p>💬 ${esc(m.comentario)}</p>` : ''}</div>`;
+  return '<div class="card c big-msg"><div class="emoji">🙌</div><h2>¡Gracias por participar!</h2></div>';
+}
+
+/* ---------- Actividades ---------- */
+function tilesHtml(items, p, r, hecho, corr, attr) {
+  return '<div class="tiles">' + items.map((o, i) => {
+    let c = `tile t${p.tipo === 'vf' ? (i === 0 ? 1 : 0) : i % 4}`;
+    const val = attr === 'v' ? (i === 0 ? 'V' : 'F') : String(i);
+    if (hecho && corr !== undefined) { if (val === String(corr)) c += ' good'; else c += ' dim'; if (r && val === String(r.respuesta)) c += ' mine'; }
+    else if (hecho) { if (r && val === String(r.respuesta)) c += ' mine'; else c += ' dim'; }
+    return `<button class="${c}" data-${attr}="${val}" ${hecho ? 'disabled' : ''}><span class="sh">${p.tipo === 'vf' ? (i === 0 ? '✔' : '✖') : FORMAS[i % 4]}</span><span>${esc(o)}</span></button>`;
+  }).join('') + '</div>';
+}
+function cuerpoActividad(p) {
+  const r = S.ses.respuestas[p.id]; const hecho = !!r;
+  const tag = { encuesta: 'Encuesta', nube: 'Nube de palabras', escala: 'Escala' }[p.tipo] || 'Actividad';
+  let h = `<div class="row"><span class="chip navy">${tag}</span><span class="chip">${p.puntos} pt${p.puntos > 1 ? 's' : ''}</span></div><h3 style="margin-top:10px">${esc(p.pregunta)}</h3>`;
+  const corr = p.correcta;
+  if (p.tipo === 'opcion') h += tilesHtml(p.opciones, p, r, hecho, corr, 'i');
+  else if (p.tipo === 'vf') h += tilesHtml(['Verdadero', 'Falso'], p, r, hecho, corr, 'v');
+  else if (p.tipo === 'encuesta') h += hecho ? '<div id="res"><div class="fb ok">✅ Respuesta registrada. ¡Gracias por participar!</div></div>' : tilesHtml(p.opciones, p, r, false, undefined, 'i');
+  else if (p.tipo === 'numerica') h += `<input id="num" inputmode="decimal" placeholder="Escribe un número" value="${hecho ? esc(r.respuesta) : ''}" ${hecho ? 'disabled' : ''}>${hecho ? '' : '<button class="btn block" id="env" style="margin-top:12px">Responder</button>'}`;
+  else if (p.tipo === 'nube') h += hecho ? `<div class="fb ok">✅ Enviaste: «${esc(r.respuesta)}»</div>` : '<input id="nb" maxlength="30" placeholder="Una palabra o frase corta" autocomplete="off"><button class="btn block" id="env" style="margin-top:12px">Enviar</button>';
+  else if (p.tipo === 'escala') h += `<div class="escala">${[1, 2, 3, 4, 5].map(n => `<button class="esc ${hecho && String(n) === String(r.respuesta) ? 'sel' : ''}" data-e="${n}" ${hecho ? 'disabled' : ''}>${n}</button>`).join('')}</div><div class="row small mut"><span>Muy en desacuerdo</span><span class="sp"></span><span>Muy de acuerdo</span></div>`;
+  else {
     let vals = []; if (hecho) { try { vals = JSON.parse(r.respuesta); } catch (e) { vals = [r.respuesta]; } }
     h += (p.campos?.length ? p.campos : ['Tu respuesta']).map((c, i) => `<label for="c${i}">${esc(c)}</label><textarea id="c${i}" maxlength="1500">${esc(vals[i] || '')}</textarea>`).join('') + `<button class="btn block" id="env" style="margin-top:12px">${hecho ? 'Actualizar respuesta' : 'Enviar respuesta'}</button>`;
   }
-  if (hecho) h += feedback(p, r);
+  if (hecho && !S.ritmoDoc) h += feedback(p, r);
   return h + '<div id="fb"></div>';
 }
 function feedback(p, r) {
-  if (p.tipo === 'encuesta') return '';
+  if (['encuesta', 'nube', 'escala'].includes(p.tipo)) return '';
   if (p.tipo === 'abierta') return r.puntaje === null ? '<div class="fb neu">✅ Respuesta enviada. Tu docente la está revisando.</div>' : `<div class="fb ok">Puntaje: <b>${r.puntaje}/${p.puntos}</b>${r.comentario ? '<br>💬 ' + esc(r.comentario) : ''}</div>`;
   const ok = r.puntaje > 0; return `<div class="fb ${ok ? 'ok' : 'bad'}">${ok ? '🎉 ¡Correcto!' : '❌ Incorrecto.'} ${p.explicacion ? esc(p.explicacion) : ''}</div>`;
 }
@@ -247,15 +317,17 @@ function enlazarActividad(p) {
       S.ses.respuestas[p.id] = { respuesta: Array.isArray(valor) ? JSON.stringify(valor) : String(valor), puntaje: d.puntaje, comentario: '', estado: d.estado };
       if (d.correcta !== undefined) { p.correcta = d.correcta; p.explicacion = d.explicacion; }
       pintarPaso();
-      if (d.resultados) { const t = d.resultados.reduce((a, b) => a + b, 0) || 1; $('#res').innerHTML = p.opciones.map((o, i) => `<div style="margin:10px 0"><div class="row small"><span class="sp">${esc(o)}</span><b>${Math.round(d.resultados[i] / t * 100)}%</b></div><div class="bar"><i style="width:${d.resultados[i] / t * 100}%"></i></div></div>`).join(''); }
+      if (d.resultados && $('#res')) { const t = d.resultados.reduce((a, b) => a + b, 0) || 1; $('#res').innerHTML = p.opciones.map((o, i) => `<div style="margin:10px 0"><div class="row small"><span class="sp">${esc(o)}</span><b>${Math.round(d.resultados[i] / t * 100)}%</b></div><div class="bar"><i style="width:${d.resultados[i] / t * 100}%"></i></div></div>`).join(''); }
     } catch (e) {
       if (e.message === 'BLOQUEADO') { S.bloqueado = true; return pintarBloqueo(); }
       if (!manejar(e)) fb.innerHTML = `<div class="err">${esc(e.message)}</div>`;
     }
   };
-  if (p.tipo === 'opcion' || p.tipo === 'encuesta') $$('.opt:not([disabled])').forEach(b => b.onclick = () => enviar(b.dataset.i));
-  else if (p.tipo === 'vf') $$('.opt:not([disabled])').forEach(b => b.onclick = () => enviar(b.dataset.v));
+  if (p.tipo === 'opcion' || p.tipo === 'encuesta') $$('.tile:not([disabled])').forEach(b => b.onclick = () => enviar(b.dataset.i));
+  else if (p.tipo === 'vf') $$('.tile:not([disabled])').forEach(b => b.onclick = () => enviar(b.dataset.v));
+  else if (p.tipo === 'escala') $$('.esc:not([disabled])').forEach(b => b.onclick = () => enviar(b.dataset.e));
   else if (p.tipo === 'numerica') { if ($('#env')) $('#env').onclick = () => enviar($('#num').value); }
+  else if (p.tipo === 'nube') { if ($('#env')) { $('#env').onclick = () => enviar($('#nb').value); $('#nb').onkeydown = e => { if (e.key === 'Enter') enviar($('#nb').value); }; } }
   else $('#env').onclick = () => enviar((p.campos?.length ? p.campos : ['x']).map((_, i) => $('#c' + i).value));
 }
 

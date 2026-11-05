@@ -74,6 +74,33 @@ function bloqueEmbed(m) {
   return `<div class="doc ${e.video ? 'v' : ''}"><iframe src="${esc(e.src)}" allow="fullscreen; autoplay; encrypted-media" allowfullscreen loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
 }
 function urlAbrir(m) { return m.driveId ? 'https://drive.google.com/file/d/' + m.driveId + '/view' : (m.url || ''); }
+/* ---- Visualización de resultados (compartida por estudiantes y proyección del docente) ---- */
+const FORMAS = ['▲', '◆', '●', '■'];
+function barras(etqs, cuentas, correcta) {
+  const t = cuentas.reduce((a, b) => a + b, 0) || 1; const max = Math.max(...cuentas, 1);
+  return etqs.map((e, i) => `<div class="bar-row"><div class="row small"><span class="sp">${esc(e)} ${correcta === i ? '✅' : ''}</span><b>${cuentas[i]} · ${Math.round(cuentas[i] / t * 100)}%</b></div><div class="bar big t${i % 4}"><i style="width:${cuentas[i] / max * 100}%"></i></div></div>`).join('');
+}
+function nubeHtml(palabras) {
+  if (!palabras || !palabras.length) return '<p class="mut c">Aún no hay palabras.</p>';
+  const max = Math.max(...palabras.map(w => w.n)); const col = ['#e21b3c', '#1368ce', '#d89e00', '#26890c', '#7a3ff2', '#0a2a66'];
+  return '<div class="nube">' + palabras.map((w, i) => `<span style="font-size:${(0.95 + 1.9 * w.n / max).toFixed(2)}rem;color:${col[i % col.length]}">${esc(w.t)}</span>`).join(' ') + '</div>';
+}
+/** p: paso (con opciones/tipo), a: agregado del servidor, correcta: valor correcto (si se conoce) */
+function aggHtml(p, a, correcta) {
+  if (!a) return '';
+  const h = `<p class="small mut c">${a.n} respuesta${a.n === 1 ? '' : 's'}</p>`;
+  if (p.tipo === 'opcion' || p.tipo === 'encuesta') return h + barras((p.opciones || []).map((o, i) => 'ABCDEFGH'[i] + '. ' + o), a.cuentas || [], p.tipo === 'opcion' ? correcta : -1);
+  if (p.tipo === 'vf') return h + barras(['Verdadero', 'Falso'], a.cuentas || [0, 0], correcta === 'V' ? 0 : correcta === 'F' ? 1 : -1);
+  if (p.tipo === 'escala') return h + barras(['1 · Muy en desacuerdo', '2', '3', '4', '5 · Muy de acuerdo'], a.cuentas || [0, 0, 0, 0, 0], -1) + `<p class="c"><b>Promedio: ${a.media}</b></p>`;
+  if (p.tipo === 'nube') return h + nubeHtml(a.palabras);
+  if (p.tipo === 'numerica') return h + `<p class="c">${a.pctOk}% acertó</p>` + (a.valores || []).map(v => `<div class="row small"><span class="sp">${esc(v.v)}</span><b>${v.n}</b></div>`).join('');
+  return h;
+}
+function podioHtml(top, miAlias) {
+  if (!top || !top.length) return '<p class="mut c">Aún no hay puntajes.</p>';
+  const med = ['🥇', '🥈', '🥉', '4°', '5°', '6°', '7°', '8°', '9°', '10°'];
+  return top.map((x, i) => `<div class="podio-row ${x.alias === miAlias ? 'yo' : ''}"><span class="med">${med[i]}</span><b class="sp">${esc(x.alias)}</b><span class="pp">${x.pts}</span></div>`).join('');
+}
 function descargarBase64(nombre, b64, tipo = 'application/pdf') {
   const bin = atob(b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
   const url = URL.createObjectURL(new Blob([a], { type: tipo }));

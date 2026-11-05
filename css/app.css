@@ -108,3 +108,34 @@ table.t tr:hover td{background:rgba(47,127,224,.06)}
 .instalar img{width:44px}
 @media print{.noprint{display:none!important}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* ---- Modo juego (Kahoot / Mentimeter) ---- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.tile{min-height:96px;border:0;border-radius:16px;color:#fff;font-weight:700;display:flex;align-items:center;gap:10px;padding:12px 14px;text-align:left;font-size:1rem;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.28);transition:transform .1s}
+.tile:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(0,0,0,.28)}
+.tile .sh{font-size:1.7rem;opacity:.95;flex:none}
+.tile.t0,.bar.t0>i{background:#e21b3c}.tile.t1,.bar.t1>i{background:#1368ce}.tile.t2,.bar.t2>i{background:#d89e00}.tile.t3,.bar.t3>i{background:#26890c}
+.tile.dim{opacity:.3}.tile.good{box-shadow:0 0 0 4px var(--ok),0 5px 0 rgba(0,0,0,.28)}.tile.mine{outline:4px solid #fff;outline-offset:-6px}
+.tile[disabled]{pointer-events:none}
+.bar.big{height:18px}.bar-row{margin:10px 0}
+.timer{position:relative;height:34px;border-radius:99px;background:rgba(255,255,255,.18);margin-top:8px;overflow:hidden}
+.timer i{position:absolute;left:0;top:0;bottom:0;width:100%;background:linear-gradient(90deg,#26890c,#d89e00,#e21b3c);background-size:300% 100%;border-radius:99px;transition:width .25s linear}
+.timer b{position:absolute;inset:0;display:grid;place-items:center;font:800 1.1rem Poppins;color:#fff;text-shadow:0 1px 3px #0008}
+.big-msg{padding:28px 18px}.big-msg .emoji{font-size:3.2rem;margin-bottom:6px}
+.okc{border:2px solid var(--ok);background:var(--okbg)}.badc{border:2px solid var(--bad);background:var(--badbg)}
+.pts{font:800 1.6rem Poppins;color:var(--ok);margin:4px 0}
+.retro{background:linear-gradient(135deg,var(--gold-l),var(--card));border:1px solid var(--gold)}
+.podio-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:var(--card);border:1px solid var(--line);margin:8px 0;font-size:1.05rem}
+.podio-row:nth-child(1){background:linear-gradient(90deg,#fff3c4,var(--card));border-color:var(--gold)}
+.podio-row.yo{outline:3px solid var(--sky)}.podio-row .med{font:800 1.3rem Poppins;width:38px;text-align:center}.podio-row .pp{font:800 1.1rem Poppins;color:var(--navy2)}
+.nube{display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;align-items:center;padding:12px;font-weight:800;line-height:1.1}
+.escala{display:flex;gap:8px;margin:14px 0}.esc{flex:1;aspect-ratio:1;max-height:64px;border:0;border-radius:16px;background:var(--navy2);color:#fff;font:800 1.4rem Poppins;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.25)}
+.esc.sel{background:var(--gold);color:#2a2100}.esc[disabled]{pointer-events:none;opacity:.6}
+.alias{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:4px 12px;font-weight:700;font-size:.85rem}
+/* control remoto y proyección */
+.remote{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px;margin:0 -16px;display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;z-index:5}
+.remote .btn{min-height:60px;font-size:1.05rem}
+.proj{position:fixed;inset:0;z-index:90;background:linear-gradient(160deg,#071c4a,#0b4a96);color:#fff;overflow:auto;padding:28px}
+.proj .in{max-width:1100px;margin:0 auto}.proj h1{font-size:clamp(1.6rem,4vw,3rem);color:#fff}
+.proj .tiles{grid-template-columns:1fr 1fr}.proj .tile{min-height:120px;font-size:1.4rem}
+.proj .podio-row{color:var(--ink)}.proj .small,.proj .mut{color:#cfe0ff}
+.proj .bar-row .row{color:#fff;font-size:1.1rem}.proj .nube{background:#fff;border-radius:20px}

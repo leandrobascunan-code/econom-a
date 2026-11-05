@@ -1,10 +1,10 @@
-/* Panel docente */
+﻿/* Panel docente */
 const App = $('#app');
-const T = { tab: 'vivo', sesiones: [], sel: null, timer: null, cfg: null, dash: null, resp: null, edit: null, resultados: null };
+const T = { tab: 'ctrl', sesiones: [], sel: null, timer: null, cfg: null, dash: null, resp: null, edit: null, resultados: null };
 const NOMBRE_DOC = 'Leandro Bascuñán';
 
 function shell(contenido) {
-  const tabs = [['vivo', '📡 En vivo'], ['corr', '✍️ Corrección'], ['res', '📊 Resultados'], ['est', '👥 Estudiantes'], ['ses', '🗂️ Sesiones'], ['inf', '📄 Informes'], ['cfg', '⚙️ Ajustes']];
+  const tabs = [['ctrl', '🎮 Control'], ['vivo', '📡 En vivo'],['corr', '✍️ Corrección'], ['res', '📊 Resultados'], ['est', '👥 Estudiantes'], ['ses', '🗂️ Sesiones'], ['inf', '📄 Informes'], ['cfg', '⚙️ Ajustes']];
   App.innerHTML = `<div class="hero wide"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="brand sp">Colegio Marina de Chile<small>Panel docente · Economía y Sociedad · Unidad 4</small></div><button class="btn sm gold" id="vp">👁 Ver como estudiante</button><button class="btn sm ghost" id="out" style="color:#fff;border-color:rgba(255,255,255,.4)">Salir</button></div><h1>Hola, ${NOMBRE_DOC}</h1><p>Participación, resultados, corrección con IA e informes.</p></div></div>
   <div class="wrap wide pull"><div class="tabs">${tabs.map(t => `<button class="tab ${T.tab === t[0] ? 'on' : ''}" data-t="${t[0]}">${t[1]}</button>`).join('')}</div><div id="main">${contenido || ''}</div></div>`;
   $('#out').onclick = salir; $('#vp').onclick = () => verComoEstudiante(T.tab === 'vivo' || T.tab === 'corr' ? T.sel : '');
@@ -53,7 +53,8 @@ async function arrancar() {
 }
 function ir(t) {
   clearInterval(T.timer); T.tab = t; shell('');
-  ({ vivo: vVivo, corr: vCorr, res: vRes, est: vEst, ses: vSes, inf: vInf, cfg: vCfg })[t]();
+  clearInterval(T.tick);
+  ({ ctrl: vCtrl, vivo: vVivo, corr: vCorr, res: vRes, est: vEst, ses: vSes, inf: vInf, cfg: vCfg })[t]();
 }
 function selSesion(id = 'sel') {
   return `<select id="${id}" style="max-width:380px">${T.sesiones.map(s => `<option value="${esc(s.id)}" ${s.id === T.sel ? 'selected' : ''}>Sesión ${s.numero} · ${esc(s.titulo)}</option>`).join('')}</select>`;
@@ -94,6 +95,105 @@ async function refrescarVivo() {
 }
 function chipSes(e) { return { abierta: '<span class="chip ok">abierta</span>', cerrada: '<span class="chip bad">cerrada</span>', proximamente: '<span class="chip warn">próximamente</span>', borrador: '<span class="chip">borrador</span>' }[e]; }
 async function autorizar(ruts) { try { const d = await API.call('docAutorizar', { sesion: T.sel, ruts }); toast(`Autorizados: ${d.autorizados}`); refrescarVivo(); } catch (e) { manejar(e); } }
+
+/* ---------- CONTROL REMOTO (pensado para el celular) ---------- */
+const ESACT = p => p && !['diapositiva', 'documento'].includes(p.tipo);
+const FASES = { diapositiva: 'Diapositiva', espera: 'Preparada', pregunta: 'Pregunta abierta', cerrada: 'Cerrada', resultados: 'Resultados', ranking: 'Ranking' };
+function accionPrincipal(c) {
+  const v = c.v, p = c.paso; if (!ESACT(p)) return { t: 'Siguiente ▶', a: 'siguiente' };
+  const punt = ['opcion', 'vf', 'numerica'].includes(p.tipo);
+  return ({ espera: { t: `▶ Lanzar pregunta (${v.dur}s)`, a: 'abrir' }, pregunta: { t: '⏹ Cerrar ahora', a: 'cerrar' }, cerrada: { t: '📊 Mostrar resultados', a: 'resultados' }, resultados: punt ? { t: '🏆 Mostrar ranking', a: 'ranking' } : { t: 'Siguiente ▶', a: 'siguiente' } })[v.fase] || { t: 'Siguiente ▶', a: 'siguiente' };
+}
+function tilesDocente(p) {
+  if (!p) return '';
+  if (p.tipo === 'opcion' || p.tipo === 'encuesta') return '<div class="tiles">' + (p.opciones || []).map((o, i) => `<div class="tile t${i % 4}" style="min-height:56px;cursor:default"><span class="sh">${FORMAS[i % 4]}</span><span>${esc(o)} ${p.tipo === 'opcion' && p.correcta === i ? '✅' : ''}</span></div>`).join('') + '</div>';
+  if (p.tipo === 'vf') return `<div class="tiles"><div class="tile t1" style="min-height:56px;cursor:default">✔ Verdadero ${p.correcta === 'V' ? '✅' : ''}</div><div class="tile t0" style="min-height:56px;cursor:default">✖ Falso ${p.correcta === 'F' ? '✅' : ''}</div></div>`;
+  if (p.tipo === 'numerica') return `<p class="mut">Respuesta correcta: <b>${esc(p.correcta)}</b></p>`;
+  return '';
+}
+async function vCtrl() {
+  if (!T.sel) { $('#main').innerHTML = '<div class="card c mut">Crea una sesión primero.</div>'; return; }
+  $('#main').innerHTML = `<div class="card row"><div style="flex:1;min-width:180px">${selSesion()}</div><label class="row" style="margin:0;font-weight:700"><input type="checkbox" id="modo" style="width:22px;min-height:0;height:22px"> Modo en vivo</label><button class="btn sm gold" id="prj">🖥 Proyectar</button></div>
+  <div class="hint" style="margin:-6px 4px 10px">Activa «Modo en vivo» para guiar la clase desde aquí: los estudiantes verán lo que tú habilites (diapositivas y preguntas con cronómetro, como Kahoot).</div>
+  <div id="cv"><div class="c"><span class="spin"></span></div></div><div id="rbar"></div><div id="aipanel"></div>`;
+  $('#sel').onchange = e => { T.sel = e.target.value; T.ckey = ''; T.ai = null; vCtrl(); };
+  $('#modo').onchange = e => accionVivo({ ritmo: e.target.checked ? 'docente' : 'libre' });
+  $('#prj').onclick = proyectar; T.ckey = '';
+  refrescarCtrl(); T.timer = setInterval(refrescarCtrl, 2000);
+  clearInterval(T.tick); T.tick = setInterval(() => { const c = T.cv; if (!c || c.v.fase !== 'pregunta') return; const left = c.v.t + c.v.dur * 1000 - (Date.now() + c.off); const n = $('#ctm'); if (n) n.textContent = Math.max(0, Math.ceil(left / 1000)) + ' s'; }, 250);
+}
+async function accionVivo(d) { try { await API.call('docVivoAccion', { sesion: T.sel, ...d }); await refrescarCtrl(true); } catch (e) { manejar(e); } }
+async function refrescarCtrl(forzar) {
+  if (!$('#cv') || document.hidden && !forzar) return;
+  let c; try { c = await API.call('docVivo', { sesion: T.sel }); } catch (e) { return manejar(e); }
+  c.off = c.v.ahora - Date.now(); T.cv = c; const v = c.v, p = c.paso;
+  const modo = $('#modo'); if (modo && document.activeElement !== modo) modo.checked = v.ritmo === 'docente';
+  const act = ESACT(p); const resp = c.agregado ? c.agregado.n : 0;
+  let h = `<div class="card"><div class="row"><span class="chip navy">${c.paso ? c.paso.idx + 1 : 0} / ${c.n}</span><span class="chip ${v.ritmo === 'docente' ? 'ok' : ''}">${v.ritmo === 'docente' ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes} conectados</span>${v.fase === 'pregunta' ? '<b id="ctm" style="font:800 1.4rem Poppins"></b>' : ''}</div>`;
+  if (p) {
+    h += `<h3 style="margin-top:12px">${esc(p.pregunta || p.titulo || '(sin título)')}</h3>`;
+    if (!act && p.texto) h += `<div class="small mut">${esc(p.texto.slice(0, 220))}${p.texto.length > 220 ? '…' : ''}</div>`;
+    h += tilesDocente(p);
+    if (act) h += `<div class="row" style="margin-top:10px"><span class="chip warn">✍️ ${resp} respondieron</span></div>`;
+  }
+  h += '</div>';
+  if (act && c.agregado && v.fase !== 'espera') {
+    h += `<div class="card"><h3>Resultados en vivo</h3>${p.tipo === 'abierta' ? `<p class="small mut">${resp} respuestas abiertas</p>${(c.agregado.textos || []).slice(-6).map(t => `<div class="fb neu small" style="margin:6px 0">${esc(t)}</div>`).join('')}` : aggHtml(p, c.agregado, p.correcta)}</div>`;
+  }
+  if (v.fase === 'ranking' || (c.ranking.length && ['resultados', 'ranking'].includes(v.fase))) h += `<div class="card"><h3>🏆 Ranking (usuarios ficticios)</h3>${podioHtml(c.ranking, '')}</div>`;
+  $('#cv').innerHTML = h;
+  const key = [v.paso, v.fase, v.ritmo].join('|');
+  if (key !== T.ckey || forzar) {
+    T.ckey = key; const m = accionPrincipal(c); const live = v.ritmo === 'docente'; if ($('#aires')) $('#aires').innerHTML = '';
+    $('#rbar').innerHTML = live ? `<div class="remote"><button class="btn ghost" id="rp">◀</button><button class="btn ${v.fase === 'pregunta' ? 'red' : 'gold'}" id="rm">${m.t}</button><button class="btn ghost" id="rn">▶</button></div>
+      <div class="row" style="margin:10px 0"><select id="rj" style="flex:1">${c.pasos.map(q => `<option value="${q.i}" ${q.i === v.paso ? 'selected' : ''}>${q.i + 1}. ${esc((q.titulo || '').slice(0, 45))} · ${q.tipo}</option>`).join('')}</select><button class="btn sm ghost" id="rt">Ir</button></div>`
+      : '<div class="info">El modo en vivo está apagado: los estudiantes avanzan a su ritmo. Actívalo arriba para guiar la clase.</div>';
+    if (live) { $('#rp').onclick = () => accionVivo({ op: 'anterior' }); $('#rn').onclick = () => accionVivo({ op: 'siguiente' }); $('#rm').onclick = () => accionVivo({ op: m.a }); $('#rt').onclick = () => accionVivo({ op: 'ir', paso: +$('#rj').value }); }
+    if (!$('#aibtns')) $('#aipanel').innerHTML = `<div class="card" id="aibtns"><h3>🤖 Análisis inmediato con IA</h3><p class="small mut">Resume cómo le fue al curso <b>sin nombrar a nadie</b> y te sugiere una retroalimentación general que puedes proyectar o enviar a las pantallas de los estudiantes.</p><div class="row"><button class="btn sm" id="a1">Analizar esta pregunta</button><button class="btn sm ghost" id="a2">Analizar toda la sesión</button><button class="btn sm gold" id="a3">⚡ Corregir abiertas y devolver feedback individual</button></div><div id="aires"></div></div>`;
+    $('#a1').onclick = () => analizar('paso'); $('#a2').onclick = () => analizar('sesion'); $('#a3').onclick = corregirAhora;
+  }
+}
+async function analizar(alcance) {
+  const box = $('#aires'); box.innerHTML = '<p><span class="spin"></span> Analizando…</p>';
+  try {
+    const a = await API.call('docAnalisisIA', { sesion: T.sel, alcance, paso: T.cv?.v.paso });
+    const li = arr => arr.length ? '<ul>' + arr.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : '<p class="mut small">—</p>';
+    box.innerHTML = `<div class="fb neu" style="margin-top:12px"><b>Resumen:</b> ${esc(a.resumen)}</div><div class="grid2"><div><b>✅ Logros</b>${li(a.logros)}</div><div><b>⚠️ Dificultades</b>${li(a.dificultades)}</div></div><b>💡 Para la próxima clase</b>${li(a.recomendaciones)}
+    <label>Retroalimentación general para el curso (puedes editarla)</label><textarea id="rmsg">${esc(a.mensaje_clase)}</textarea><div class="row" style="margin-top:8px"><button class="btn sm gold" id="rshare">📣 Mostrar a los estudiantes</button><span class="hint">Aparece en sus pantallas, sin nombres.</span></div>`;
+    $('#rshare').onclick = async () => { try { await API.call('docCompartirRetro', { sesion: T.sel, texto: $('#rmsg').value }); toast('Retroalimentación enviada a la clase ✅'); } catch (e) { manejar(e); } };
+  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') manejar(e); }
+}
+async function corregirAhora() {
+  const p = T.cv?.paso; if (!p || p.tipo !== 'abierta') return toast('Ubícate en una pregunta abierta para corregirla.');
+  const box = $('#aires'); box.innerHTML = '<p><span class="spin"></span> Corrigiendo con IA…</p>'; let tot = 0;
+  try {
+    for (let i = 0; i < 40; i++) { const d = await API.call('docCorregirIA', { sesion: T.sel, paso: p.id }); tot += d.corregidas; if (!d.pendientes || (!d.corregidas && d.fallos)) break; }
+    const ap = await API.call('docAprobarIA', { sesion: T.sel, paso: p.id });
+    box.innerHTML = `<div class="fb ok" style="margin-top:12px">✅ Corregidas: ${tot} · Aprobadas y devueltas a los estudiantes: ${ap.aprobadas}. Cada estudiante ve su retroalimentación individual en su pantalla.</div>`;
+  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+/** Pantalla de proyección para el proyector / pizarra digital */
+function proyectar() {
+  const base = location.href.replace(/docente\.html.*$/, '') + 'index.html?s=' + encodeURIComponent(T.sel);
+  const w = document.createElement('div'); w.className = 'proj'; document.body.appendChild(w);
+  try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => { }); } catch (e) { }
+  const cerrar = () => { clearInterval(w._t); clearInterval(w._k); w.remove(); document.removeEventListener('keydown', esc_); try { document.fullscreenElement && document.exitFullscreen(); } catch (e) { } };
+  const esc_ = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', esc_);
+  const pintar = async () => {
+    let c; try { c = await API.call('docVivo', { sesion: T.sel }); } catch (e) { return; }
+    c.off = c.v.ahora - Date.now(); w._c = c; const v = c.v, p = c.paso; let cuerpo = '';
+    if (!p) cuerpo = '<h1>Sin contenido</h1>';
+    else if (!ESACT(p)) cuerpo = `<h1>${esc(p.titulo || '')}</h1><div style="font-size:1.5rem">${p.texto ? md(p.texto) : ''}</div>${bloqueEmbed(p)}`;
+    else if (v.fase === 'ranking') cuerpo = `<h1>🏆 Ranking</h1><div style="max-width:700px">${podioHtml(c.ranking, '')}</div>`;
+    else if (v.fase === 'espera') cuerpo = `<h1>${esc(p.pregunta)}</h1>${tilesDocente({ ...p, correcta: -1 })}<p class="mut">Prepárate…</p>`;
+    else if (v.fase === 'pregunta') cuerpo = `<div class="row"><h1 class="sp">${esc(p.pregunta)}</h1><b id="ptm" style="font:800 4rem Poppins;color:#ffd23f"></b></div>${tilesDocente({ ...p, correcta: -1 })}<p style="font-size:1.4rem">✍️ ${c.agregado ? c.agregado.n : 0} / ${c.presentes} respondieron</p>`;
+    else cuerpo = `<h1>${esc(p.pregunta)}</h1><div style="background:var(--card);color:var(--ink);border-radius:20px;padding:16px">${p.tipo === 'abierta' ? `<p>${c.agregado.n} respuestas</p>` : aggHtml(p, c.agregado, p.correcta)}</div>${v.retro ? `<div class="card retro" style="color:var(--ink);margin-top:14px"><b>🧑‍🏫 Retroalimentación</b><p style="font-size:1.2rem">${md(v.retro)}</p></div>` : ''}`;
+    w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip">👥 ${c.presentes}</span><button class="btn sm ghost" id="pcl" style="color:#fff;border-color:#fff8">Cerrar (Esc)</button></div>${cuerpo}<div class="row" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div></div>`;
+    $('#pcl').onclick = cerrar; new QRCode($('#pqr'), { text: base, width: 96, height: 96, correctLevel: QRCode.CorrectLevel.M });
+  };
+  w._k = setInterval(() => { const c = w._c; if (!c || c.v.fase !== 'pregunta') return; const n = $('#ptm'); if (n) n.textContent = Math.max(0, Math.ceil((c.v.t + c.v.dur * 1000 - (Date.now() + c.off)) / 1000)); }, 250);
+  pintar(); w._t = setInterval(pintar, 2000);
+}
 
 /* ---------- CORRECCIÓN ---------- */
 async function vCorr(paso) {
@@ -167,8 +267,8 @@ async function vEst() {
   <div class="card"><h3>Importar lista</h3><p class="small mut">Copia las filas desde Excel/Sheets (Correos · Curso · Nombre Alumno · Electivo) y pégalas aquí. El RUT se toma del correo. Si el RUT ya existe, se actualizan nombre y curso.</p><textarea id="ei" style="min-height:130px" placeholder="23211642-0@andaliensur.cl&#9;3° Medio A&#9;Sepulveda Castro, Ezequiel Camilo&#9;Economía y Sociedad"></textarea><div id="eim"></div><button class="btn block gold" id="eb" style="margin-top:10px">Importar</button></div></div>
   <div class="card"><h3>Cursos</h3><div class="row">${D.cursos.map(c => `<span class="chip navy" style="font-size:.85rem">${esc(c)} <a href="#" data-rn="${esc(c)}" style="color:#fff;text-decoration:none" title="Renombrar">✎</a></span>`).join('')}</div><div class="hint">Un curso nuevo se crea al asignárselo a un estudiante. ✎ renombra el curso para todos sus estudiantes.</div></div>
   <div class="card row"><select id="ef" style="max-width:220px"><option value="">Todos los cursos (${D.estudiantes.length})</option>${D.cursos.map(c => `<option ${c === fc ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><span class="sp small mut">${lista.length} estudiantes</span></div>
-  <div class="scroll"><table class="t"><tr><th>Estudiante</th><th>RUT</th><th>Curso</th><th>Correo</th><th>Último ingreso</th><th></th></tr>
-  ${lista.map(e => `<tr><td><b>${esc(e.nombre)}</b></td><td>${esc(e.rut)}</td><td>${esc(e.curso)}</td><td class="small">${esc(e.correo) || '<span class="chip warn">sin correo</span>'}</td><td class="small">${e.ultimo ? fmtFecha(e.ultimo, true) : '—'}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-ed="${esc(e.rut)}">Editar</button> <button class="btn sm ghost" data-del="${esc(e.rut)}">🗑</button></td></tr>`).join('') || '<tr><td colspan="6" class="c mut">Sin estudiantes. Importa tu lista o agrega uno.</td></tr>'}</table></div>`;
+  <div class="scroll"><table class="t"><tr><th>Estudiante</th><th>RUT</th><th>Usuario ficticio</th><th>Curso</th><th>Correo</th><th>Último ingreso</th><th></th></tr>
+  ${lista.map(e => `<tr><td><b>${esc(e.nombre)}</b></td><td>${esc(e.rut)}</td><td><span class="chip navy">${esc(e.alias)}</span> <a href="#" data-al="${esc(e.rut)}" title="Cambiar usuario ficticio">🔄</a></td><td>${esc(e.curso)}</td><td class="small">${esc(e.correo) || '<span class="chip warn">sin correo</span>'}</td><td class="small">${e.ultimo ? fmtFecha(e.ultimo, true) : '—'}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-ed="${esc(e.rut)}">Editar</button> <button class="btn sm ghost" data-del="${esc(e.rut)}">🗑</button></td></tr>`).join('') || '<tr><td colspan="6" class="c mut">Sin estudiantes. Importa tu lista o agrega uno.</td></tr>'}</table></div>`;
   $('#er').oninput = e => { e.target.value = formatRut(e.target.value); };
   $('#ef').onchange = e => { T.cursoE = e.target.value; vEst(); };
   $('#eg').onclick = async () => { try { await API.call('docGuardarEstudiante', { estudiante: { rut: $('#er').value, nombre: $('#en').value, curso: $('#ec').value, correo: $('#em').value } }); toast('Estudiante guardado ✅'); vEst(); } catch (e) { $('#em1').innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') manejar(e); } };
@@ -178,6 +278,7 @@ async function vEst() {
     catch (e) { manejar(e); } b.disabled = false; b.textContent = 'Importar';
   };
   $$('[data-ed]').forEach(b => b.onclick = () => { const e = D.estudiantes.find(x => x.rut === b.dataset.ed); $('#er').value = e.rut; $('#en').value = e.nombre; $('#ec').value = e.curso; $('#em').value = e.correo; $('#ft').scrollIntoView({ behavior: 'smooth' }); });
+  $$('[data-al]').forEach(a => a.onclick = async ev => { ev.preventDefault(); try { const d = await API.call('docRegenerarAlias', { rut: a.dataset.al }); toast('Nuevo usuario: ' + d.alias); vEst(); } catch (e) { manejar(e); } });
   $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('¿Quitar a este estudiante de la asignatura? Sus respuestas quedan en la planilla.')) return; try { await API.call('docEliminarEstudiante', { rut: b.dataset.del }); vEst(); } catch (e) { manejar(e); } });
   $$('[data-rn]').forEach(a => a.onclick = async ev => { ev.preventDefault(); const n = prompt('Nuevo nombre para el curso «' + a.dataset.rn + '»:', a.dataset.rn); if (!n || n === a.dataset.rn) return; try { const d = await API.call('docRenombrarCurso', { de: a.dataset.rn, a: n }); toast(`Curso renombrado (${d.estudiantes} estudiantes)`); vEst(); } catch (e) { manejar(e); } });
 }
@@ -192,7 +293,7 @@ function vSes() {
   $$('[data-e]').forEach(b => b.onclick = () => { T.edit = JSON.parse(JSON.stringify(T.sesiones.find(s => s.id === b.dataset.e))); editor(); });
   $$('[data-d]').forEach(b => b.onclick = async () => { if (!confirm('¿Eliminar la sesión? Las respuestas de los estudiantes se conservan en la planilla.')) return; try { await API.call('docEliminarSesion', { id: b.dataset.d }); T.sesiones = (await API.call('docSesiones')).sesiones; vSes(); } catch (e) { manejar(e); } });
 }
-const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva / video incrustado', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', abierta: 'Pregunta abierta (IA)' };
+const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva / video incrustado', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', nube: 'Nube de palabras (Menti)', escala: 'Escala 1 a 5 (Menti)', abierta: 'Pregunta abierta (IA)' };
 function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${etiqueta}</label>${tipo === 'area' ? `<textarea data-k="${k}">${esc(v ?? '')}</textarea>` : `<input data-k="${k}" type="${tipo}" value="${esc(v ?? '')}" ${extra}>`}`; }
 function pasoForm(p, i) {
   let f = '';
@@ -205,7 +306,7 @@ function pasoForm(p, i) {
     if (p.tipo === 'vf') f += `<label>Correcta</label><select data-k="correcta"><option value="V" ${p.correcta === 'V' ? 'selected' : ''}>Verdadero</option><option value="F" ${p.correcta === 'F' ? 'selected' : ''}>Falso</option></select>`;
     if (p.tipo === 'numerica') f += campo('correcta', 'Valor correcto', p.correcta, 'number', 'step="any"') + campo('tolerancia', 'Tolerancia', p.tolerancia ?? 0.01, 'number', 'step="any"');
     if (p.tipo === 'abierta') f += campo('campos', 'Campos de respuesta (uno por línea)', (p.campos || ['Tu respuesta']).join('\n'), 'area') + campo('modelo', 'Respuesta modelo / pauta (la usa la IA)', p.modelo, 'area') + campo('rubrica', 'Rúbrica', p.rubrica, 'area');
-    f += campo('puntos', 'Puntos', p.puntos ?? 1, 'number', 'step="0.5" min="0"');
+    f += campo('puntos', 'Puntos', p.puntos ?? 1, 'number', 'step="0.5" min="0"') + campo('tiempo', 'Tiempo en vivo (segundos, opcional)', p.tiempo || '', 'number', 'min="5"');
     if (p.tipo !== 'abierta' && p.tipo !== 'encuesta') f += campo('explicacion', 'Explicación (se muestra al responder)', p.explicacion, 'area');
   }
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
@@ -216,7 +317,7 @@ function leerPasos() {
     const p = { id: T.edit.pasos[+c.dataset.i]?.id || 'n' + Math.random().toString(36).slice(2, 7), tipo: g('tipo') };
     if (p.tipo === 'documento') { p.titulo = g('titulo'); p.texto = g('texto'); p.url = g('url'); p.driveId = g('driveId'); p.mime = g('mime'); return p; }
     if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); return p; }
-    p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1;
+    p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1; if (+g('tiempo')) p.tiempo = +g('tiempo');
     if (g('titulo') !== undefined) p.titulo = g('titulo');
     if (p.tipo === 'opcion' || p.tipo === 'encuesta') p.opciones = g('opciones').split('\n').map(x => x.trim()).filter(Boolean);
     if (p.tipo === 'opcion') p.correcta = (+g('correcta') || 1) - 1;
@@ -240,6 +341,7 @@ function editor() {
   <div class="grid2"><div><div class="drop" data-dest="paso">📽️ <b>A la presentación</b><div class="small mut">Se verán como diapositivas dentro de la clase</div></div></div><div><div class="drop" data-dest="mat">📚 <b>Al material y videos</b><div class="small mut">Los estudiantes lo ven cuando quieran</div></div></div></div>
   <input type="file" id="fi" multiple hidden accept=".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.m4v,.mp3"><div id="upm"></div>
   <div class="hint">Canva: en Canva usa Compartir → «Ver» → copia el enlace y pégalo en un paso «Archivo / Canva / video incrustado» (botón «＋ Archivo o enlace»).</div></div>
+  <div id="iaq"></div>
   <h3>Material y videos <button class="btn sm ghost" id="am">＋</button></h3><div id="mats">${e.material.map(matForm).join('')}</div>
   <h3 style="margin-top:18px">Presentación y actividades <span class="mut small">(diapositivas, preguntas)</span></h3><div id="pasos">${e.pasos.map(pasoForm).join('')}</div>
   <div class="row"><button class="btn sm" id="ap_">＋ Diapositiva</button><button class="btn sm" id="ad">＋ Archivo o enlace</button><button class="btn sm" id="aq">＋ Actividad</button></div>`;
@@ -248,6 +350,7 @@ function editor() {
   $('#bk').onclick = () => { T.edit = null; vSes(); };
   $('#am').onclick = () => { e.pasos = leerPasos(); e.material = [...leerMat(), { tipo: 'video', titulo: '', url: '', descripcion: '' }]; copiarCab(); editor(); };
   $('#ap_').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'diapositiva', titulo: '', texto: '' }]; e.material = leerMat(); copiarCab(); editor(); };
+  montarIA(e, nuevos => { e.pasos = [...leerPasos(), ...nuevos]; e.material = leerMat(); copiarCab(); editor(); toast(`${nuevos.length} actividad(es) agregadas. Recuerda pulsar «Guardar».`, 5000); });
   $('#ad').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'documento', titulo: '', url: '' }]; e.material = leerMat(); copiarCab(); editor(); };
   let destino = 'paso';
   $$('.drop').forEach(d => { d.onclick = () => { destino = d.dataset.dest; $('#fi').click(); }; d.ondragover = ev => { ev.preventDefault(); d.classList.add('on'); }; d.ondragleave = () => d.classList.remove('on'); d.ondrop = ev => { ev.preventDefault(); d.classList.remove('on'); destino = d.dataset.dest; subir([...ev.dataTransfer.files]); }; });
@@ -277,6 +380,54 @@ function editor() {
     try { const { id } = await API.call('docGuardarSesion', { sesion: e }); T.sesiones = (await API.call('docSesiones')).sesiones; T.sel = T.sel || id; T.edit = null; toast('Sesión guardada ✅'); vSes(); } catch (er) { manejar(er); b.disabled = false; }
   };
 }
+/* ---------- Generador de actividades con IA (a partir del tema, la sesión o un documento) ---------- */
+function cargarLib(src) { return new Promise((res, rej) => { if (document.querySelector(`script[src="${src}"]`)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar la librería para leer el archivo. Revisa tu internet.')); document.head.appendChild(s); }); }
+async function extraerTexto(file) {
+  const n = file.name.toLowerCase();
+  if (n.endsWith('.txt') || n.endsWith('.md') || n.endsWith('.csv')) return await file.text();
+  if (n.endsWith('.pdf')) {
+    await cargarLib('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise; let t = '';
+    for (let i = 1; i <= Math.min(pdf.numPages, 60) && t.length < 16000; i++) { const c = await (await pdf.getPage(i)).getTextContent(); t += c.items.map(x => x.str).join(' ') + '\n'; }
+    return t;
+  }
+  if (n.endsWith('.docx') || n.endsWith('.pptx')) {
+    await cargarLib('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'); const z = await JSZip.loadAsync(file); let t = '';
+    const txt = async (name, tag) => { const doc = new DOMParser().parseFromString(await z.file(name).async('string'), 'application/xml'); return [...doc.getElementsByTagName(tag)].map(p => p.textContent).filter(Boolean).join('\n'); };
+    if (n.endsWith('.docx')) t = await txt('word/document.xml', 'w:p');
+    else { const sl = Object.keys(z.files).filter(k => /^ppt\/slides\/slide\d+\.xml$/.test(k)).sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0])); for (const k of sl) t += await txt(k, 'a:p') + '\n\n'; }
+    return t;
+  }
+  throw new Error('Formato no compatible para leer texto. Usa PDF, Word (.docx), PowerPoint (.pptx) o TXT. (Los .doc/.ppt antiguos: guárdalos como .docx/.pptx.)');
+}
+function montarIA(e, agregar) {
+  const box = $('#iaq'); if (!box) return;
+  const T_ = [['opcion', 'Opción múltiple'], ['vf', 'Verdadero/Falso'], ['numerica', 'Numérica'], ['encuesta', 'Encuesta'], ['nube', 'Nube de palabras'], ['escala', 'Escala 1-5'], ['abierta', 'Abierta']];
+  box.innerHTML = `<div class="card"><h3>🤖 Crear actividades con IA <span class="chip gold">estilo Kahoot / Menti</span></h3><p class="small mut">La IA propone preguntas acordes a esta sesión (título, descripción y diapositivas) y, si quieres, a un documento que subas. Tú revisas y eliges cuáles agregar.</p>
+  <label>Tema o instrucciones (opcional)</label><input id="iat" placeholder="Ej: ventaja comparativa y costo de oportunidad">
+  <div class="grid2"><div><label>Cantidad</label><input id="ian" type="number" min="1" max="12" value="6"></div><div><label>Dificultad</label><select id="iad"><option>fácil</option><option selected>media</option><option>difícil</option></select></div></div>
+  <label>Tipos de actividad</label><div class="row">${T_.map(([k, l]) => `<label class="row" style="margin:0;font-weight:500"><input type="checkbox" class="iatp" value="${k}" ${['opcion', 'vf', 'numerica', 'nube'].includes(k) ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> ${l}</label>`).join('')}</div>
+  <label>Documento (PDF, Word, PowerPoint o TXT) — opcional</label><input type="file" id="iaf" accept=".pdf,.docx,.pptx,.txt,.md"><div class="hint" id="iafs"></div>
+  <label>…o pega texto aquí (opcional)</label><textarea id="iax" style="min-height:70px"></textarea>
+  <button class="btn block" id="iag" style="margin-top:12px">✨ Generar preguntas</button><div id="iar"></div></div>`;
+  let textoDoc = '';
+  $('#iaf').onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return; $('#iafs').textContent = 'Leyendo documento…';
+    try { textoDoc = await extraerTexto(f); $('#iafs').textContent = textoDoc.trim() ? `✅ Texto leído (${textoDoc.length.toLocaleString('es-CL')} caracteres; se usan los primeros ~12.000).` : '⚠️ No se encontró texto (¿es un PDF escaneado/imagen?).'; }
+    catch (er) { textoDoc = ''; $('#iafs').textContent = '❌ ' + er.message; }
+  };
+  $('#iag').onclick = async () => {
+    const b = $('#iag'); b.disabled = true; b.textContent = 'Generando…'; $('#iar').innerHTML = '';
+    try {
+      const tipos = $$('.iatp').filter(x => x.checked).map(x => x.value);
+      const d = await API.call('docGenerarIA', { sesion: e.id || '', tema: $('#iat').value || e.titulo, cantidad: +$('#ian').value, nivel: $('#iad').value, tipos, texto: ($('#iax').value + '\n' + textoDoc).trim() });
+      const lbl = { opcion: 'Opción múltiple', vf: 'V/F', numerica: 'Numérica', encuesta: 'Encuesta', nube: 'Nube', escala: 'Escala', abierta: 'Abierta' };
+      $('#iar').innerHTML = `<h3 style="margin-top:14px">Propuestas (${d.preguntas.length})</h3>` + d.preguntas.map((q, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="iasel" data-i="${i}" checked style="width:20px;min-height:0;height:20px;display:inline-block;vertical-align:middle"> <span class="chip navy">${lbl[q.tipo]}</span> <b>${esc(q.pregunta)}</b>${q.opciones ? '<ol type="A" class="small" style="margin:6px 0 0 18px">' + q.opciones.map((o, j) => `<li ${q.tipo === 'opcion' && j === q.correcta ? 'style="color:var(--ok);font-weight:700"' : ''}>${esc(o)}</li>`).join('') + '</ol>' : ''}${q.tipo === 'vf' ? `<div class="small">Correcta: ${q.correcta === 'V' ? 'Verdadero' : 'Falso'}</div>` : ''}${q.tipo === 'numerica' ? `<div class="small">Correcta: ${esc(q.correcta)}</div>` : ''}${q.explicacion ? `<div class="small mut">💡 ${esc(q.explicacion)}</div>` : ''}${q.modelo ? `<div class="small mut">Pauta: ${esc(q.modelo)}</div>` : ''}</label>`).join('') + '<button class="btn gold block" id="iaadd">➕ Agregar las seleccionadas a la sesión</button>';
+      $('#iaadd').onclick = () => { const sel = $$('.iasel').filter(x => x.checked).map(x => d.preguntas[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos una.'); agregar(sel); };
+    } catch (er) { $('#iar').innerHTML = `<div class="err">${esc(er.message)}</div>`; if (er.code === 'SESION_EXPIRADA') manejar(er); }
+    b.disabled = false; b.textContent = '✨ Generar preguntas';
+  };
+}
 function matForm(m, i) { return `<div class="paso-ed mat" data-did="${esc(m.driveId || '')}" data-mime="${esc(m.mime || '')}">${m.driveId ? '<span class="chip ok">📎 Archivo subido a tu Drive</span>' : ''}<div class="row"><select class="mt" style="max-width:160px">${['video', 'documento', 'enlace'].map(t => `<option ${m.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select><input class="mti" placeholder="Título" value="${esc(m.titulo)}" style="flex:1;min-width:160px"><button class="btn sm ghost" data-rm="${i}">✕</button></div><input class="mu" placeholder="URL (YouTube, Drive, PDF en el repositorio…)" value="${esc(m.url)}" style="margin-top:8px"><input class="md" placeholder="Descripción (opcional)" value="${esc(m.descripcion || '')}" style="margin-top:8px"></div>`; }
 
 /* ---------- INFORMES ---------- */
@@ -284,12 +435,18 @@ async function vInf() {
   $('#main').innerHTML = '<div class="c"><span class="spin"></span></div>';
   try { T.resultados = await API.call('docResultados', { curso: T.cursoF || '' }); } catch (e) { return manejar(e); }
   const R = T.resultados;
-  $('#main').innerHTML = `<div class="card"><div class="row"><select id="cf" style="max-width:200px"><option value="">Todos los cursos</option>${R.cursos.map(c => `<option ${c === T.cursoF ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><span class="sp"></span><button class="btn gold" id="pc" ${T.cursoF ? '' : 'disabled'}>📄 PDF de todo el curso</button></div><div class="hint">Selecciona un curso para generar el PDF conjunto (una hoja por estudiante). Los PDF se guardan también en tu Drive («Informes Economía U4»).</div></div>
+  $('#main').innerHTML = `<div class="card"><div class="row"><select id="cf" style="max-width:200px"><option value="">Todos los cursos</option>${R.cursos.map(c => `<option ${c === T.cursoF ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><span class="sp"></span><button class="btn gold" id="pc" ${T.cursoF ? '' : 'disabled'}>📄 PDF de todo el curso</button><button class="btn" id="pm">✉ Enviar informe por correo (${T.cursoF || 'todos'})</button></div><div class="hint">Selecciona un curso para generar el PDF conjunto (una hoja por estudiante). Los PDF se guardan también en tu Drive («Informes Economía U4»).</div></div>
   <div class="scroll"><table class="t"><tr><th>Estudiante</th><th>Curso</th><th>Logro</th><th>Nota</th><th>Observación del docente (aparece en el informe)</th><th></th></tr>
   ${R.alumnos.map(a => `<tr data-rut="${esc(a.rut)}"><td><b>${esc(a.nombre)}</b><div class="small mut">${esc(a.rut)}</div></td><td>${esc(a.curso)}</td><td>${a.progreso.pct_logro}%</td><td>${a.progreso.nota === null ? '—' : String(a.progreso.nota).replace('.', ',')}</td><td><textarea class="ob" style="min-height:56px">${esc(a.observacion)}</textarea></td><td><button class="btn sm gold pdf">PDF</button></td></tr>`).join('')}</table></div>`;
   $('#cf').onchange = e => { T.cursoF = e.target.value; vInf(); };
   const gen = async (b, datos) => { const t = b.textContent; b.disabled = true; b.textContent = '…'; try { const d = await API.call('docInforme', datos); descargarBase64(d.nombre, d.base64); toast('Informe generado ✅'); } catch (e) { manejar(e); } b.disabled = false; b.textContent = t; };
   $('#pc').onclick = e => gen(e.target, { curso: T.cursoF });
+  $('#pm').onclick = async ev => {
+    if (!confirm(`Se enviará desde tu correo el informe PDF a cada estudiante de «${T.cursoF || 'todos los cursos'}» que tenga correo registrado. ¿Continuar?`)) return;
+    const b = ev.target; b.disabled = true; let desde = 0, ok = 0, fallos = 0;
+    try { for (let i = 0; i < 20; i++) { b.textContent = `Enviando… (${ok})`; const d = await API.call('docEnviarInformes', { curso: T.cursoF || '', desde, maximo: 12 }); ok += d.enviados; fallos += d.fallos; desde = d.siguiente; if (!d.restantes) break; } alert(`Informes enviados: ${ok}\nFallos: ${fallos}`); } catch (e) { manejar(e); }
+    b.disabled = false; b.textContent = `✉ Enviar informe por correo (${T.cursoF || 'todos'})`;
+  };
   $$('.pdf').forEach(b => b.onclick = async () => { const tr = b.closest('tr'); try { await API.call('docGuardarObs', { rut: tr.dataset.rut, observacion: $('.ob', tr).value }); } catch (e) { return manejar(e); } gen(b, { ruts: [tr.dataset.rut] }); });
   $$('.ob').forEach(t => t.onchange = () => API.call('docGuardarObs', { rut: t.closest('tr').dataset.rut, observacion: t.value }).then(() => toast('Observación guardada')).catch(manejar));
 }
