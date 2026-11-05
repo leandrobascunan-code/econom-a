@@ -18,13 +18,14 @@ function toast(msg, ms = 3200) {
   setTimeout(() => d.remove(), ms);
 }
 
+const URL_RESPALDO = 'https://script.google.com/macros/s/AKfycbypxpiJ9zg6P0mStMsiHK7gXmdLnWrPeHdklcmPQj08mXTs5FhTOypkV-d_T1lyPkCZAA/exec';
 const API = {
   token: null,
+  url() { const u = window.CONFIG && window.CONFIG.API_URL; return u && u.startsWith('https://script.google.com/') ? u : URL_RESPALDO; },
   async call(accion, datos = {}, opts = {}) {
-    if (!CONFIG.API_URL || CONFIG.API_URL.startsWith('PEGA')) throw new Error('Falta configurar la URL de Apps Script en js/config.js');
     let r;
     try {
-      r = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({ accion, token: this.token, ...datos }), keepalive: !!opts.keepalive });
+      r = await fetch(this.url(), { method: 'POST', body: JSON.stringify({ accion, token: this.token, ...datos }), keepalive: !!opts.keepalive });
     } catch (e) { throw new Error('Sin conexión con el servidor. Revisa tu internet.'); }
     let j; try { j = await r.json(); } catch (e) { throw new Error('Respuesta inválida del servidor.'); }
     if (!j.ok) { const err = new Error(j.error); err.code = j.error; throw err; }
