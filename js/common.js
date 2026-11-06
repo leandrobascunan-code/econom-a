@@ -77,12 +77,70 @@ function bloqueEmbed(m) {
 }
 function urlAbrir(m) { return m.driveId ? 'https://drive.google.com/file/d/' + m.driveId + '/view' : (m.url || ''); }
 /* ---- Diapositivas visuales (estilo presentación) ---- */
-const LAYOUTS = { portada: 'Portada', titulo: 'Solo título', solo: 'Solo texto', 'imagen-derecha': 'Imagen a la derecha', 'imagen-izquierda': 'Imagen a la izquierda', 'imagen-arriba': 'Imagen arriba', dividido: 'Dividido 50/50', fondo: 'Imagen de fondo', tarjeta: 'Tarjeta sobre imagen', destacado: 'Idea destacada', cita: 'Cita' };
+const LAYOUTS = { video: 'Solo video (sin texto)', portada: 'Portada', titulo: 'Solo título', solo: 'Solo texto', 'imagen-derecha': 'Imagen a la derecha', 'imagen-izquierda': 'Imagen a la izquierda', 'imagen-arriba': 'Imagen arriba', dividido: 'Dividido 50/50', fondo: 'Imagen de fondo', tarjeta: 'Tarjeta sobre imagen', destacado: 'Idea destacada', cita: 'Cita' };
 const TEMAS = { azul: 'Azul marino', claro: 'Claro', oscuro: 'Oscuro', dorado: 'Dorado', oceano: 'Océano', atardecer: 'Atardecer', bosque: 'Bosque', minimal: 'Minimal', marfil: 'Marfil', neon: 'Neón' };
 const FXS = { inclinado: 'Inclinado 3D', flotante: 'Flotante 3D', profundidad: 'Profundidad 3D', polaroid: 'Polaroid', extruido: 'Título en relieve 3D', zoom: 'Zoom suave' };
 const FORMAS_IMG = { completa: 'Completa (según diseño)', tarjeta: 'Tarjeta con sombra', circulo: 'Círculo', arco: 'Arco' };
 const FILTROS = { bn: 'Blanco y negro', sepia: 'Sepia', duotono: 'Duotono azul', vivo: 'Colores vivos', suave: 'Suave', oscuro: 'Oscuro' };
-function inline(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>'); }
+/* ---- Formato de texto: negrita, cursiva, subrayado, resaltado, colores y tamaños ----
+   El texto se guarda como texto plano con marcas {{etiqueta|texto}} (ej: {{b|importante}}, {{c:rojo|ojo}}, {{h:amarillo|clave}}).
+   Se muestra con clases CSS predefinidas (no se guarda HTML), por eso es seguro y igual en todas las pantallas. */
+const FMT_COLORES = { rojo: '#ef4444', naranja: '#f97316', ambar: '#f59e0b', verde: '#22c55e', turquesa: '#14b8a6', azul: '#3b82f6', morado: '#a855f7', rosa: '#ec4899', blanco: '#ffffff', negro: '#111827', gris: '#9ca3af' };
+const FMT_RESALTES = { amarillo: '#fde047', verde: '#86efac', celeste: '#7dd3fc', rosa: '#f9a8d4', naranja: '#fdba74' };
+const FMT_TAMANOS = ['chico', 'grande', 'enorme'];
+const RE_TAG = /^(b|i|u|c:[a-z]+|h:[a-z]+|s:[a-z]+)$/;
+function envolverHtml(tag, inner) {
+  if (tag === 'b') return '<b>' + inner + '</b>'; if (tag === 'i') return '<i>' + inner + '</i>'; if (tag === 'u') return '<u>' + inner + '</u>';
+  const [k, v] = tag.split(':');
+  if (k === 'c' && FMT_COLORES[v]) return `<span class="tc-${v}">${inner}</span>`;
+  if (k === 'h' && FMT_RESALTES[v]) return `<span class="hl-${v}">${inner}</span>`;
+  if (k === 's' && FMT_TAMANOS.includes(v)) return `<span class="ts-${v}">${inner}</span>`;
+  return inner;
+}
+function inlineTokens(s) {
+  let out = '', i = 0;
+  while (i < s.length) {
+    if (s.startsWith('{{', i)) {
+      const bar = s.indexOf('|', i + 2);
+      if (bar > 0 && RE_TAG.test(s.slice(i + 2, bar))) {
+        let depth = 1, j = bar + 1;
+        while (j < s.length) { if (s.startsWith('{{', j)) { depth++; j += 2; } else if (s.startsWith('}}', j)) { depth--; if (depth === 0) break; j += 2; } else j++; }
+        if (depth === 0) { out += envolverHtml(s.slice(i + 2, bar), inlineTokens(s.slice(bar + 1, j))); i = j + 2; continue; }
+      }
+    }
+    out += esc(s[i]); i++;
+  }
+  return out;
+}
+function inline(t) { return inlineTokens(String(t ?? '')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>'); }
+/* HTML editable (contenteditable) -> texto con marcas */
+const rgbHex = c => { const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c || ''); return m ? '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('') : String(c || '').toLowerCase(); };
+const nombreDe = (mapa, hex) => Object.keys(mapa).find(k => mapa[k] === hex) || '';
+const BLOQUE = /^(DIV|P|UL|OL|H[1-6])$/;
+function unirNodos(nodos) { let out = ''; [...nodos].forEach(n => { const s = nodoAMarkup(n); if (n.nodeType === 1 && BLOQUE.test(n.tagName) && out && !out.endsWith('\n')) out += '\n'; out += s; }); return out; }
+function envolverLineas(s, t) { return s.split('\n').map(seg => seg.trim() ? '{{' + t + '|' + seg + '}}' : seg).join('\n'); }
+function nodoAMarkup(n) {
+  if (n.nodeType === 3) return n.nodeValue.replace(/ /g, ' ').replace(/\{\{/g, '{ {').replace(/\}\}/g, '} }');
+  if (n.nodeType !== 1) return '';
+  const tag = n.tagName; if (tag === 'BR') return '\n';
+  if (tag === 'UL' || tag === 'OL') return [...n.children].map(li => '- ' + unirNodos(li.childNodes).replace(/\n+$/, '')).join('\n') + '\n';
+  const inner = unirNodos(n.childNodes);
+  if (BLOQUE.test(tag) || tag === 'LI') return inner.endsWith('\n') ? inner : inner + '\n';
+  if (!inner.trim()) return inner;
+  const st = n.style || {}, cl = String(n.className || ''); const tags = [];
+  if (tag === 'B' || tag === 'STRONG' || st.fontWeight === 'bold' || +st.fontWeight >= 600) tags.push('b');
+  if (tag === 'I' || tag === 'EM' || st.fontStyle === 'italic') tags.push('i');
+  if (tag === 'U' || /underline/.test(st.textDecorationLine || st.textDecoration || '')) tags.push('u');
+  const col = nombreDe(FMT_COLORES, rgbHex(st.color)) || nombreDe(FMT_COLORES, String(n.getAttribute('color') || '').toLowerCase()) || (/(?:^|\s)tc-([a-z]+)/.exec(cl) || [])[1] || '';
+  if (col && FMT_COLORES[col]) tags.push('c:' + col);
+  const hl = nombreDe(FMT_RESALTES, rgbHex(st.backgroundColor)) || (/(?:^|\s)hl-([a-z]+)/.exec(cl) || [])[1] || '';
+  if (hl && FMT_RESALTES[hl]) tags.push('h:' + hl);
+  const fsMap = { small: 'chico', 'x-small': 'chico', large: 'grande', 'x-large': 'enorme', 'xx-large': 'enorme' }, fsAttr = { 1: 'chico', 2: 'chico', 4: 'grande', 5: 'enorme', 6: 'enorme', 7: 'enorme' };
+  const sz = fsMap[st.fontSize] || fsAttr[n.getAttribute('size')] || (/(?:^|\s)ts-([a-z]+)/.exec(cl) || [])[1] || '';
+  if (sz && FMT_TAMANOS.includes(sz)) tags.push('s:' + sz);
+  return tags.reduce((acc, t) => envolverLineas(acc, t), inner);
+}
+function htmlAMarkup(root) { return unirNodos(root.childNodes).replace(/\n{3,}/g, '\n\n').replace(/\n+$/, ''); }
 function textoRico(t) {
   let html = '', ul = false;
   String(t || '').split('\n').forEach(l => {
@@ -100,7 +158,7 @@ function ytId(u) { const m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shor
 function ytUrl(p, proj) {
   const id = ytId(p.video); if (!id) return '';
   const silencio = p.vaudio === 'audio' ? false : p.vaudio === 'proy' ? !proj : true;
-  const q = new URLSearchParams({ mute: silencio ? 1 : 0, autoplay: p.vauto ? 1 : 0, controls: p.vctrl === 'no' ? 0 : 1, rel: 0, modestbranding: 1, playsinline: 1 });
+  const q = new URLSearchParams({ mute: silencio ? 1 : 0, autoplay: (proj || p.vauto) ? 1 : 0, controls: p.vctrl === 'no' ? 0 : 1, rel: 0, modestbranding: 1, playsinline: 1 });
   if (p.vloop) { q.set('loop', 1); q.set('playlist', id); }
   const ini = Number(p.vini) || 0; if (ini > 0) q.set('start', ini);
   return 'https://www.youtube-nocookie.com/embed/' + id + '?' + q.toString();
@@ -108,7 +166,7 @@ function ytUrl(p, proj) {
 /** edit=true: título y texto editables sobre la diapositiva.  opts.live: reproduce el video (si no, muestra su miniatura).  opts.proj: es la proyección del docente. */
 function slideStage(p, edit, opts) {
   opts = opts || {}; const vid = ytId(p.video); const hay = !!(p.imagen || vid);
-  const lay = LAYOUTS[p.layout] ? p.layout : (hay ? 'imagen-derecha' : 'solo'); const th = TEMAS[p.tema] ? p.tema : 'azul';
+  const lay = p.layout === 'video' ? (vid ? 'video' : 'solo') : (LAYOUTS[p.layout] ? p.layout : (hay ? 'imagen-derecha' : 'solo')); const th = TEMAS[p.tema] ? p.tema : 'azul';
   const fx = FXS[p.fx] ? p.fx : '', fo0 = FORMAS_IMG[p.forma] ? p.forma : 'completa', fi = FILTROS[p.filtro] ? p.filtro : '';
   const fo = ['inclinado', 'flotante', 'polaroid', 'profundidad'].includes(fx) && fo0 === 'completa' ? 'tarjeta' : fo0;   // los efectos 3D necesitan la imagen como tarjeta
   const mov = MOVS[p.mov] ? p.mov : '', vel = VELS[p.movvel] ? p.movvel : 'normal';
@@ -118,8 +176,8 @@ function slideStage(p, edit, opts) {
   else if (p.imagen) media = `<div class="st-img"><img src="${esc(p.imagen)}" alt="" referrerpolicy="no-referrer" draggable="false"></div>`;
   const cl = v => Math.max(0, Math.min(100, Number(v))); const foco = (p.movx !== undefined && p.movx !== '' && p.movy !== undefined && p.movy !== '' && !isNaN(Number(p.movx)) && !isNaN(Number(p.movy))) ? ` style="--fx:${cl(p.movx)}%;--fy:${cl(p.movy)}%"` : '';
   const obj = p.obj ? `<img class="st-obj om-${OBJMOVS[p.objmov] ? p.objmov : 'navegar'}" src="${esc(p.obj)}" alt="" referrerpolicy="no-referrer" draggable="false" style="--ow:${Math.max(8, Math.min(60, Number(p.objw) || 24))}%;--oy:${Math.max(0, Math.min(80, p.objy === '' || p.objy === undefined ? 58 : Number(p.objy)))}%">` : '';
-  const t = edit ? `<h2 class="st-t" contenteditable="plaintext-only" spellcheck="false" data-k="titulo" data-ph="Título">${esc(p.titulo)}</h2>` : `<h2 class="st-t">${esc(p.titulo)}</h2>`;
-  const b = edit ? `<div class="st-b" contenteditable="plaintext-only" spellcheck="false" data-k="texto" data-ph="Escribe aquí… (usa «- » para viñetas)">${esc(p.texto)}</div>` : `<div class="st-b">${textoRico(p.texto)}</div>`;
+  const t = edit ? `<h2 class="st-t" contenteditable="true" spellcheck="false" data-rich="1" data-k="titulo" data-ph="Título">${inline(p.titulo)}</h2>` : `<h2 class="st-t">${inline(p.titulo)}</h2>`;
+  const b = edit ? `<div class="st-b" contenteditable="true" spellcheck="false" data-rich="1" data-k="texto" data-ph="Escribe aquí…">${textoRico(p.texto)}</div>` : `<div class="st-b">${textoRico(p.texto)}</div>`;
   return `<div class="stage th-${th} lay-${lay} ${hay ? 'con-img' : ''} ${fxCls}"${foco}><div class="st-deco"></div>${media}<div class="st-txt">${t}${b}</div>${obj}${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
 }
 /** Sin IA de visión: propone movimientos según palabras del título, el texto o la dirección de la imagen. */

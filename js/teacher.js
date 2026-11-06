@@ -296,15 +296,16 @@ function proyectar() {
   const pintar = async () => {
     let c; try { c = await API.call('docVivo', { sesion: T.sel, proy: true }); } catch (e) { return; }
     c.off = c.v.ahora - Date.now(); w._c = c; const v = c.v, p = c.paso; let cuerpo = '';
-    const sig = JSON.stringify({ ...c, off: 0, v: { ...c.v, ahora: 0 } }); if (sig === w._sig) return; w._sig = sig;   // sin parpadeo si nada cambió
+    const pc = $('#pcnt'); if (pc) pc.textContent = '👥 ' + c.presentes;   // el contador se actualiza aparte, sin redibujar (así el video no se reinicia)
+    const esDiap = !ESACT(p); const sig = esDiap ? JSON.stringify({ paso: v.paso, p }) : JSON.stringify({ ...c, off: 0, v: { ...c.v, ahora: 0 } }); if (sig === w._sig) return; w._sig = sig;   // sin parpadeo si nada cambió
     if (!p) cuerpo = '<h1>Sin contenido</h1>';
-    else if (p.tipo === 'diapositiva') cuerpo = `<div style="width:min(calc(100vw - 56px), calc((100vh - 140px) * 1.7778));margin:0 auto">${slideStage(p, false, { live: true, proj: true })}</div>`;
+    else if (p.tipo === 'diapositiva') cuerpo = `<div style="width:min(calc(100vw - 56px), calc((100vh - 140px) * 1.7778));margin:0 auto">${slideStage(p, false, { live: true, proj: true })}</div>${ytId(p.video) ? `<div class="small" style="text-align:center;margin-top:8px"><a href="https://www.youtube.com/watch?v=${ytId(p.video)}" target="_blank" rel="noopener" style="color:#cfe0ff">¿No se reproduce? Abrir el video en YouTube</a></div>` : ''}`;
     else if (!ESACT(p)) cuerpo = `<h1>${esc(p.titulo || '')}</h1>${bloqueEmbed(p)}`;
     else if (v.fase === 'ranking') cuerpo = `<h1>🏆 Ranking</h1><div style="max-width:700px">${podioHtml(c.ranking, '')}</div>`;
     else if (v.fase === 'espera') cuerpo = `<h1>${esc(p.pregunta)}</h1>${tilesDocente({ ...p, correcta: -1 })}<p class="mut">Prepárate…</p>`;
     else if (v.fase === 'pregunta') cuerpo = `<div class="row"><h1 class="sp">${esc(p.pregunta)}</h1><b id="ptm" style="font:800 4rem Poppins;color:#ffd23f"></b></div>${tilesDocente({ ...p, correcta: -1 })}<p style="font-size:1.4rem">✍️ ${c.agregado ? c.agregado.n : 0} / ${c.presentes} respondieron</p>`;
     else cuerpo = `<h1>${esc(p.pregunta)}</h1><div class="proj-grid ${v.retro ? 'dos' : ''}"><div class="proj-card">${p.tipo === 'abierta' ? `<p>${c.agregado.n} respuestas</p>` : aggHtml(p, c.agregado, p.correcta)}</div>${v.retro ? `<div class="proj-card retro"><b>🧑‍🏫 Retroalimentación</b><div class="rp">${textoRico(v.retro)}</div></div>` : ''}</div>`;
-    w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip">👥 ${c.presentes}</span></div>${cuerpo}${v.paso === 0 && v.fase !== 'pregunta' ? '<div class="row qrbox" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div>' : ''}</div>`;
+    w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip" id="pcnt">👥 ${c.presentes}</span></div>${cuerpo}${v.paso === 0 && v.fase !== 'pregunta' ? '<div class="row qrbox" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div>' : ''}</div>`;
     if ($('#pqr')) new QRCode($('#pqr'), { text: base, width: 140, height: 140, correctLevel: QRCode.CorrectLevel.M });
   };
   w._k = setInterval(() => { const c = w._c; if (!c || c.v.fase !== 'pregunta') return; const n = $('#ptm'); if (n) n.textContent = Math.max(0, Math.ceil((c.v.t + c.v.dur * 1000 - (Date.now() + c.off)) / 1000)); }, 250);
@@ -424,7 +425,13 @@ const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva 
 function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${etiqueta}</label>${tipo === 'area' ? `<textarea data-k="${k}">${esc(v ?? '')}</textarea>` : `<input data-k="${k}" type="${tipo}" value="${esc(v ?? '')}" ${extra}>`}`; }
 const PH_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb2f0"/><stop offset="1" stop-color="#2f6fb5"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="600" cy="180" r="90" fill="#ffffff55"/><path d="M0 600 L260 330 L430 480 L560 380 L800 600Z" fill="#ffffff44"/></svg>');
 const urlDrive = (r, ancho) => 'https://lh3.googleusercontent.com/d/' + r.id + (/gif/i.test(r.mime || '') ? '' : '=w' + (ancho || 1600));
-/** Efectos y diseño de una diapositiva (o de TODA la presentación): 3D, movimiento, formas, filtros, objeto móvil, con vista previa animada. */
+/** Barra de formato de texto (negrita, cursiva, subrayado, resaltado, color, tamaño, viñetas). */
+function fmtBar() {
+  return `<div class="fmtbar" role="toolbar" aria-label="Formato de texto"><button type="button" data-f="bold" title="Negrita (Ctrl+B)"><b>B</b></button><button type="button" data-f="italic" title="Cursiva (Ctrl+I)"><i>I</i></button><button type="button" data-f="underline" title="Subrayado (Ctrl+U)"><u>U</u></button><span class="sep"></span>
+  <button type="button" data-f="hl" title="Resaltar con marcador">🖍</button><button type="button" data-f="color" title="Color del texto"><span style="color:#ef4444;font-weight:800">A</span><span style="display:block;height:3px;background:#ef4444;border-radius:2px;margin-top:-4px"></span></button><span class="sep"></span>
+  <button type="button" data-f="menos" title="Letra más pequeña">A−</button><button type="button" data-f="normal" title="Tamaño normal">A</button><button type="button" data-f="mas" title="Letra más grande">A+</button><span class="sep"></span>
+  <button type="button" data-f="ul" title="Lista con viñetas">• Viñetas</button><button type="button" data-f="clear" title="Quitar el formato del texto seleccionado">✖ Formato</button></div>`;
+}/** Efectos y diseño de una diapositiva (o de TODA la presentación): 3D, movimiento, formas, filtros, objeto móvil, con vista previa animada. */
 function modalEstilo(ed, rerender, global) {
   const slides = $$('#pasos .edslide'); if (!slides.length) return toast('Aún no hay diapositivas.');
   const base = ed || slides[0];
@@ -489,14 +496,15 @@ function modalVideo(ed, rerender) {
   <label>Dirección del video (YouTube)</label><input id="v_url" placeholder="https://www.youtube.com/watch?v=…" value="${esc(val('video'))}">
   <div class="fxprev" id="v_prev"></div>
   <div class="grid2"><div><label>Audio</label><select id="v_aud">${Object.entries(VAUDIOS).map(([k, v]) => `<option value="${k}" ${(val('vaudio') || 'silencio') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div><div><label>Comenzar en el segundo</label><input id="v_ini" type="number" min="0" value="${esc(val('vini'))}" placeholder="0"></div></div>
-  <label class="row" style="font-weight:500"><input type="checkbox" id="v_auto" ${val('vauto') ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Reproducir automáticamente</label>
+  <label class="row" style="font-weight:500"><input type="checkbox" id="v_solo" ${val('layout') === 'video' ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Solo video, sin título ni texto (pantalla completa)</label>
+  <label class="row" style="font-weight:500"><input type="checkbox" id="v_auto" ${val('vauto') || !val('video') ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Reproducir automáticamente</label>
   <label class="row" style="font-weight:500"><input type="checkbox" id="v_loop" ${val('vloop') ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Repetir en bucle</label>
   <label class="row" style="font-weight:500"><input type="checkbox" id="v_ctrl" ${val('vctrl') !== 'no' ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Mostrar controles</label>
   <div class="hint">El video ocupa el lugar de la imagen y el texto de la diapositiva aparece junto a él. Elige dónde con «🎨 Diseños» (derecha, izquierda, arriba, dividido, fondo o tarjeta). Con audio, algunos navegadores esperan a que la persona toque la pantalla para reproducir el sonido.</div>
   <div class="row" style="margin-top:12px"><button type="button" class="btn gold" id="v_ok">Aplicar</button><button type="button" class="btn ghost" id="v_no">Cancelar</button><button type="button" class="btn ghost" id="v_del" style="margin-left:auto">Quitar video</button></div></div>`;
   document.body.appendChild(m);
   const cerrar = () => { m.remove(); document.removeEventListener('keydown', escV); }; const escV = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', escV);
-  const pint = () => { $('#v_prev', m).innerHTML = ytId($('#v_url', m).value) ? `<div class="mini">${slideStage({ ...m0, video: $('#v_url', m).value, layout: ['solo', 'titulo', 'destacado', 'cita', 'portada'].includes(m0.layout) ? 'imagen-derecha' : m0.layout }, false)}</div>` : '<p class="small mut c">Pega un enlace de YouTube para ver la vista previa.</p>'; };
+  const pint = () => { $('#v_prev', m).innerHTML = ytId($('#v_url', m).value) ? `<div class="mini">${slideStage({ ...m0, video: $('#v_url', m).value, layout: $('#v_solo', m) && $('#v_solo', m).checked ? 'video' : (['solo', 'titulo', 'destacado', 'cita', 'portada', 'video'].includes(m0.layout) ? 'imagen-derecha' : m0.layout) }, false)}</div>` : '<p class="small mut c">Pega un enlace de YouTube para ver la vista previa.</p>'; };
   $('#v_url', m).oninput = pint; pint();
   $('#vx', m).onclick = cerrar; $('#v_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
   const put = (k, v) => { const e = $(`[data-k="${k}"]`, ed); if (e) e.value = v; };
@@ -504,7 +512,7 @@ function modalVideo(ed, rerender) {
   $('#v_ok', m).onclick = () => {
     const u = $('#v_url', m).value.trim(); if (u && !ytId(u)) return toast('Pega un enlace de YouTube válido (youtube.com/watch?v=… o youtu.be/…).', 4500);
     put('video', u); put('vaudio', $('#v_aud', m).value); put('vauto', $('#v_auto', m).checked ? '1' : ''); put('vloop', $('#v_loop', m).checked ? '1' : ''); put('vctrl', $('#v_ctrl', m).checked ? 'si' : 'no'); put('vini', $('#v_ini', m).value);
-    if (u && ['solo', 'titulo', 'destacado', 'cita', 'portada', ''].includes(val('layout'))) put('layout', 'imagen-derecha');
+    if (u && $('#v_solo', m).checked) put('layout', 'video'); else if (u && ['solo', 'titulo', 'destacado', 'cita', 'portada', 'video', ''].includes(val('layout'))) put('layout', 'imagen-derecha');
     cerrar(); rerender();
   };
 }
@@ -512,10 +520,10 @@ function modalVideo(ed, rerender) {
 function galeria(ed, rerender) {
   const val = k => { const e = $(`[data-k="${k}"]`, ed); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
   const ph = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb2f0"/><stop offset="1" stop-color="#2f6fb5"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="600" cy="180" r="90" fill="#ffffff55"/><path d="M0 600 L260 330 L430 480 L560 380 L800 600Z" fill="#ffffff44"/></svg>');
-  const base = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || ph, credito: '', layout: val('layout'), tema: val('tema') };
+  const base = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || ph, credito: '', layout: val('layout'), tema: val('tema'), video: val('video') };
   const m = document.createElement('div'); m.className = 'modal';
   m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">🎨 Elige un diseño</h3><button type="button" class="btn sm ghost" id="gx" aria-label="Cerrar">✕</button></div><p class="small mut">Toca el que más te guste. Tu texto y tu imagen se conservan.</p>
-  <b>Diseño</b><div class="galeria">${Object.entries(LAYOUTS).map(([k, v]) => `<button type="button" data-lay="${k}" class="${k === base.layout ? 'on' : ''}"><div class="mini">${slideStage({ ...base, layout: k }, false)}</div><small>${v}</small></button>`).join('')}</div>
+  <b>Diseño</b><div class="galeria">${Object.entries(LAYOUTS).filter(([k]) => k !== 'video' || ytId(base.video)).map(([k, v]) => `<button type="button" data-lay="${k}" class="${k === base.layout ? 'on' : ''}"><div class="mini">${slideStage({ ...base, layout: k }, false)}</div><small>${v}</small></button>`).join('')}</div>
   <b>Colores</b><div class="galeria">${Object.entries(TEMAS).map(([k, v]) => `<button type="button" data-tema="${k}" class="${k === base.tema ? 'on' : ''}"><div class="mini">${slideStage({ ...base, tema: k }, false)}</div><small>${v}</small></button>`).join('')}</div>
   <label class="row" style="font-weight:500"><input type="checkbox" id="gall" style="width:20px;min-height:0;height:20px"> Aplicar el color elegido a toda la presentación</label></div>`;
   document.body.appendChild(m);
@@ -553,13 +561,13 @@ function tiempoDefCliente(t) { return { opcion: 20, vf: 15, numerica: 40, encues
 function pasoForm(p, i) {
   let f = '';
   if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
-  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm" data-a="fx">✨ Efectos</button><button class="btn sm" data-a="vid">🎬 Video</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><input type="hidden" data-k="fx" value="${esc(p.fx || '')}"><input type="hidden" data-k="forma" value="${esc(p.forma || '')}"><input type="hidden" data-k="filtro" value="${esc(p.filtro || '')}">${['mov', 'movvel', 'movx', 'movy', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].map(k => `<input type="hidden" data-k="${k}" value="${esc(p[k] ?? '')}">`).join('')}<div class="imgpanel"></div></div>`;
+  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${fmtBar()}${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm" data-a="fx">✨ Efectos</button><button class="btn sm" data-a="vid">🎬 Video</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Selecciona un texto y usa la barra de formato (negrita, color, resaltado, tamaño, viñetas).</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><input type="hidden" data-k="fx" value="${esc(p.fx || '')}"><input type="hidden" data-k="forma" value="${esc(p.forma || '')}"><input type="hidden" data-k="filtro" value="${esc(p.filtro || '')}">${['mov', 'movvel', 'movx', 'movy', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].map(k => `<input type="hidden" data-k="${k}" value="${esc(p[k] ?? '')}">`).join('')}<div class="imgpanel"></div></div>`;
   else f = preguntaEditor(p);
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
 }
 function leerPasos() {
   return $$('#pasos .paso-ed').map(c => {
-    const g = k => { const e = $(`[data-k="${k}"]`, c); if (!e) return undefined; return e.value !== undefined ? e.value : e.innerText.replace(/ /g, ' ').replace(/\n+$/, ''); };
+    const g = k => { const e = $(`[data-k="${k}"]`, c); if (!e) return undefined; if (e.dataset && e.dataset.rich) return htmlAMarkup(e); return e.value !== undefined ? e.value : e.innerText.replace(/ /g, ' ').replace(/\n+$/, ''); };
     const p = { id: T.edit.pasos[+c.dataset.i]?.id || 'n' + Math.random().toString(36).slice(2, 7), tipo: g('tipo') };
     if (p.tipo === 'documento') { p.titulo = g('titulo'); p.texto = g('texto'); p.url = g('url'); p.driveId = g('driveId'); p.mime = g('mime'); return p; }
     if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); p.fx = g('fx'); p.forma = g('forma'); p.filtro = g('filtro'); ['mov', 'movvel', 'movx', 'movy', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].forEach(k => p[k] = g(k)); return p; }
@@ -587,7 +595,7 @@ function editor() {
   <p class="small mut">Todo en una sola secuencia, en el orden en que se verá: diapositivas, archivos, videos y actividades (estilo Kahoot/Menti). En modo en vivo tú avanzas paso a paso desde el celular.</p>
   <div class="outline row" style="gap:6px">${e.pasos.map((p, i) => `<a href="#" class="chip ${ESACT(p) ? 'warn' : 'navy'}" data-go="${i}" title="${esc(p.titulo || p.pregunta || '')}">${i + 1} ${ICONO[p.tipo] || '•'}</a>`).join('') || '<span class="mut small">Aún no hay pasos.</span>'}</div>
   <div class="row" style="margin-top:12px"><label style="margin:0">Insertar nuevos pasos:</label><select id="pos" style="max-width:330px"><option value="">al final</option>${e.pasos.map((p, i) => `<option value="${i}" ${T.pos === i ? 'selected' : ''}>después del paso ${i + 1} · ${esc((p.titulo || p.pregunta || p.tipo).slice(0, 30))}</option>`).join('')}</select>
-  </div><div class="row" style="gap:6px;margin-top:10px">${[['diapositiva', '🖼 Diapositiva'], ['opcion', '🔺 Opción múltiple'], ['vf', '✔ V/F'], ['numerica', '🔢 Numérica'], ['encuesta', '📊 Encuesta'], ['nube', '☁ Nube'], ['escala', '⭐ Escala'], ['abierta', '✍ Abierta'], ['documento', '📎 Archivo/enlace']].map(([k, l]) => `<button type="button" class="btn sm" data-add="${k}">${l}</button>`).join('')}</div></div>
+  </div><div class="row" style="gap:6px;margin-top:10px">${[['diapositiva', '🖼 Diapositiva'], ['video', '🎬 Solo video'], ['opcion', '🔺 Opción múltiple'], ['vf', '✔ V/F'], ['numerica', '🔢 Numérica'], ['encuesta', '📊 Encuesta'], ['nube', '☁ Nube'], ['escala', '⭐ Escala'], ['abierta', '✍ Abierta'], ['documento', '📎 Archivo/enlace']].map(([k, l]) => `<button type="button" class="btn sm" data-add="${k}">${l}</button>`).join('')}</div></div>
   <div id="pasos">${e.pasos.map(pasoForm).join('')}</div>
   <div class="card"><h3>⬆ Subir archivos completos</h3><p class="small mut">Arrastra o elige PDF, PowerPoint, Word, imágenes o videos. Se guardan en tu Drive y quedan dentro de esta sesión; no necesitas copiar nada. Máx. 300 MB por archivo. Se insertan donde indica «Insertar nuevos pasos».</p>
   <div class="grid2"><div class="drop" data-dest="paso">📽️ <b>Como un paso de la clase</b><div class="small mut">PDF, PowerPoint, imagen, video…</div></div><div class="drop" data-dest="split">✂️ <b>PDF → una diapositiva por página</b><div class="small mut">Así puedes meter actividades entre medio</div></div></div>
@@ -602,7 +610,7 @@ function editor() {
   $('#am').onclick = () => { e.pasos = leerPasos(); e.material = [...leerMat(), { tipo: 'video', titulo: '', url: '', descripcion: '' }]; copiarCab(); editor(); };
   const posIns = () => { const v = $('#pos').value; return v === '' ? e.pasos.length : +v + 1; };
   const insertar = (nuevos, mats = []) => { const i = posIns(); const ps = leerPasos(); ps.splice(Math.min(i, ps.length), 0, ...nuevos); e.pasos = ps; e.material = [...leerMat(), ...mats]; copiarCab(); T.pos = i + nuevos.length - 1; editor(); };
-  $$('[data-add]').forEach(b => b.onclick = () => insertar([nuevoPaso(b.dataset.add)]));
+  $$('[data-add]').forEach(b => b.onclick = () => { insertar([nuevoPaso(b.dataset.add)]); if (b.dataset.add === 'video') { const card = $$('#pasos .paso-ed')[T.pos]; const bt = card && $('[data-a="vid"]', card); if (bt) bt.click(); } });
   $$('[data-go]').forEach(a => a.onclick = ev => { ev.preventDefault(); const el = $$('#pasos .paso-ed')[+a.dataset.go]; if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
   montarIA(e, nuevos => { insertar(nuevos); toast(`${nuevos.length} actividad(es) agregadas. Recuerda pulsar «Guardar».`, 5000); });
   let destino = 'paso';
@@ -640,6 +648,28 @@ function editor() {
   });  const rerender = () => { e.pasos = leerPasos(); e.material = leerMat(); copiarCab(); const sc = scrollY; editor(); scrollTo(0, sc); };
   $('#pasos').addEventListener('change', ev => { const k = ev.target.dataset.k; if (k === 'layout' || k === 'tema') rerender(); });
   if ($('#gs')) $('#gs').onclick = () => modalEstilo(null, rerender, true);
+  /* --- formato de texto sobre la diapositiva --- */
+  const richDe = ed => { const s = getSelection(); if (!s || !s.rangeCount) return null; let nodo = s.anchorNode; nodo = nodo && (nodo.nodeType === 3 ? nodo.parentElement : nodo); const r = nodo && nodo.closest && nodo.closest('[data-rich]'); return r && ed.contains(r) ? r : null; };
+  $('#pasos').addEventListener('mousedown', ev => { if (ev.target.closest('.fmtbar')) ev.preventDefault(); });   // conserva la selección al tocar la barra
+  $('#pasos').addEventListener('paste', ev => { if (!(ev.target.closest && ev.target.closest('[data-rich]'))) return; ev.preventDefault(); document.execCommand('insertText', false, (ev.clipboardData || window.clipboardData).getData('text/plain')); });
+  $('#pasos').addEventListener('click', ev => {
+    const bar = ev.target.closest('.fmtbar'); if (!bar) return; const btn = ev.target.closest('button'); if (!btn) return; const ed = bar.closest('.edslide');
+    const cerrarPop = () => { const p0 = $('.fmtpop', bar); if (p0) p0.remove(); };
+    const rich = richDe(ed); const ejec = (cmd, val) => { document.execCommand('styleWithCSS', false, true); document.execCommand(cmd, false, val); rich.dispatchEvent(new Event('input', { bubbles: true })); };
+    if (btn.dataset.sw) { cerrarPop(); if (!rich) return toast('Selecciona primero un texto.'); if (btn.dataset.sw === 'color') ejec('foreColor', btn.dataset.v); else { try { ejec('hiliteColor', btn.dataset.v); } catch (e) { ejec('backColor', btn.dataset.v); } } return; }
+    const f = btn.dataset.f; if (!f) return;
+    if (f === 'color' || f === 'hl') {
+      const ya = $('.fmtpop', bar); cerrarPop(); if (ya && ya.dataset.k === f) return;
+      const mapa = f === 'color' ? FMT_COLORES : FMT_RESALTES;
+      bar.insertAdjacentHTML('beforeend', `<div class="fmtpop" data-k="${f}"><div class="t">${f === 'color' ? 'Color del texto' : 'Color del marcador'}</div>${Object.entries(mapa).map(([k, v]) => `<button type="button" data-sw="${f}" data-v="${v}" title="${k}" style="background:${v}"></button>`).join('')}</div>`); return;
+    }
+    cerrarPop();
+    if (!rich) return toast('Selecciona primero un texto de la diapositiva.');
+    if (f === 'bold' || f === 'italic' || f === 'underline') return ejec(f);
+    if (f === 'mas') return ejec('fontSize', '5'); if (f === 'menos') return ejec('fontSize', '2'); if (f === 'normal') return ejec('fontSize', '3');
+    if (f === 'ul') { if (rich.dataset.k !== 'texto') return toast('Las viñetas se usan en el texto de la diapositiva, no en el título.'); return ejec('insertUnorderedList'); }
+    if (f === 'clear') { const s = getSelection(); const rg = s.getRangeAt(0); $$('span[class*="tc-"],span[class*="hl-"],span[class*="ts-"]', rich).forEach(sp => { if (rg.intersectsNode(sp)) { while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp); sp.remove(); } }); return ejec('removeFormat'); }
+  });
   $('#pasos').addEventListener('click', ev => {
     const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg' && a !== 'gal' && a !== 'fx' && a !== 'vid') return;
     const ed = ev.target.closest('.edslide'); const set = (src, cred) => { $('[data-k="imagen"]', ed).value = src; $('[data-k="credito"]', ed).value = cred || ''; rerender(); };
@@ -667,7 +697,7 @@ const ICONO = { diapositiva: '🖼', documento: '📎', opcion: '🔺', vf: '✔
 function nuevoPaso(t) {
   const id = 'n' + Math.random().toString(36).slice(2, 7);
   return ({
-    diapositiva: { id, tipo: t, titulo: '', texto: '', layout: 'solo', tema: 'azul' }, documento: { id, tipo: t, titulo: '', url: '' },
+    diapositiva: { id, tipo: t, titulo: '', texto: '', layout: 'solo', tema: 'azul' }, video: { id, tipo: 'diapositiva', titulo: '', texto: '', layout: 'video', tema: 'oscuro', video: '', vaudio: 'proy', vauto: '1', vctrl: 'si' }, documento: { id, tipo: t, titulo: '', url: '' },
     opcion: { id, tipo: t, pregunta: '', opciones: ['', '', '', ''], correcta: 0, puntos: 1 }, vf: { id, tipo: t, pregunta: '', correcta: 'V', puntos: 1 },
     numerica: { id, tipo: t, pregunta: '', correcta: 0, tolerancia: 0.01, puntos: 2 }, encuesta: { id, tipo: t, pregunta: '', opciones: ['', '', ''], puntos: 1 },
     nube: { id, tipo: t, pregunta: '', puntos: 1 }, escala: { id, tipo: t, pregunta: '', puntos: 1 }, abierta: { id, tipo: t, pregunta: '', campos: ['Tu respuesta'], puntos: 3 }
@@ -709,7 +739,22 @@ async function extraerTexto(file) {
   }
   throw new Error('Formato no compatible para leer texto. Usa PDF, Word (.docx), PowerPoint (.pptx) o TXT. (Los .doc/.ppt antiguos: guárdalos como .docx/.pptx.)');
 }
-function montarIA(e, agregar) {
+/* ---- Generación fiel al documento: fuente y verificación visibles ---- */
+const marcado = p => (p.verificada === false || (p.cifras && p.cifras.length)) ? '' : 'checked';
+function insignia(p) {
+  if (p.verificada === undefined) return '';
+  let h = p.verificada ? '<span class="chip ok" title="La cita aparece en tu documento">✅ Respaldada por el documento</span>' : '<span class="chip warn" title="No se encontró esa cita en tu documento">⚠️ No se encontró en el documento — revisa</span>';
+  if (p.cifras && p.cifras.length) h += ` <span class="chip bad">🔢 Cifras que no están en el documento: ${esc(p.cifras.join(', '))}</span>`;
+  if (p.fuente) h += `<div class="small mut" style="margin-top:4px">📄 «${esc(p.fuente)}»</div>`;
+  return h;
+}
+function avisoGen(d) {
+  let h = d.modo === 'fiel' ? '<div class="fb ok small" style="margin-top:10px">📄 <b>Modo fiel al documento:</b> el contenido sale solo de tu documento o texto. Cada elemento muestra su fuente; los que no se pudieron respaldar quedan <b>sin marcar</b> para que los revises.</div>'
+    : '<div class="fb neu small" style="margin-top:10px">ℹ️ <b>Sin documento:</b> la IA usa conocimiento general. Revisa cifras, fechas y definiciones antes de usarlo. Sube un documento o pega tu texto para que se ciña a tu material.</div>';
+  if (d.truncado) h += '<div class="fb bad small" style="margin-top:8px">⚠️ Tu documento es muy largo: se usaron solo los primeros 16.000 caracteres. Divídelo por temas para cubrirlo completo.</div>';
+  return h;
+}
+const limpiarGen = p => { const q = { ...p }; delete q.fuente; delete q.verificada; delete q.cifras; delete q.imagen_q; return q; };function montarIA(e, agregar) {
   const box = $('#iaq'); if (!box) return;
   const T_ = [['opcion', 'Opción múltiple'], ['vf', 'Verdadero/Falso'], ['numerica', 'Numérica'], ['encuesta', 'Encuesta'], ['nube', 'Nube de palabras'], ['escala', 'Escala 1-5'], ['abierta', 'Abierta']];
   box.innerHTML = `<div class="card"><h3>🤖 Crear actividades con IA <span class="chip gold">estilo Kahoot / Menti</span></h3><p class="small mut">La IA propone preguntas acordes a esta sesión (título, descripción y diapositivas) y, si quieres, a un documento que subas. Tú revisas y eliges cuáles agregar.</p>
@@ -732,8 +777,8 @@ function montarIA(e, agregar) {
       const tipos = $$('.iatp').filter(x => x.checked).map(x => x.value);
       const d = await API.call('docGenerarIA', { sesion: e.id || '', tema: $('#iat').value || e.titulo, cantidad: +$('#ian').value, nivel: $('#iad').value, tipos, texto: ($('#iax').value + '\n' + textoDoc).trim() });
       const lbl = { opcion: 'Opción múltiple', vf: 'V/F', numerica: 'Numérica', encuesta: 'Encuesta', nube: 'Nube', escala: 'Escala', abierta: 'Abierta' };
-      $('#iar').innerHTML = `<h3 style="margin-top:14px">Propuestas (${d.preguntas.length})</h3>` + d.preguntas.map((q, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="iasel" data-i="${i}" checked style="width:20px;min-height:0;height:20px;display:inline-block;vertical-align:middle"> <span class="chip navy">${lbl[q.tipo]}</span> <b>${esc(q.pregunta)}</b>${q.opciones ? '<ol type="A" class="small" style="margin:6px 0 0 18px">' + q.opciones.map((o, j) => `<li ${q.tipo === 'opcion' && j === q.correcta ? 'style="color:var(--ok);font-weight:700"' : ''}>${esc(o)}</li>`).join('') + '</ol>' : ''}${q.tipo === 'vf' ? `<div class="small">Correcta: ${q.correcta === 'V' ? 'Verdadero' : 'Falso'}</div>` : ''}${q.tipo === 'numerica' ? `<div class="small">Correcta: ${esc(q.correcta)}</div>` : ''}${q.explicacion ? `<div class="small mut">💡 ${esc(q.explicacion)}</div>` : ''}${q.modelo ? `<div class="small mut">Pauta: ${esc(q.modelo)}</div>` : ''}</label>`).join('') + '<button class="btn gold block" id="iaadd">➕ Agregar las seleccionadas a la sesión</button>';
-      $('#iaadd').onclick = () => { const sel = $$('.iasel').filter(x => x.checked).map(x => d.preguntas[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos una.'); agregar(sel); };
+      $('#iar').innerHTML = `<h3 style="margin-top:14px">Propuestas (${d.preguntas.length})</h3>${avisoGen(d)}` + d.preguntas.map((q, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="iasel" data-i="${i}" ${marcado(q)} style="width:20px;min-height:0;height:20px;display:inline-block;vertical-align:middle"> <span class="chip navy">${lbl[q.tipo]}</span> <b>${esc(q.pregunta)}</b> ${insignia(q)}${q.opciones ? '<ol type="A" class="small" style="margin:6px 0 0 18px">' + q.opciones.map((o, j) => `<li ${q.tipo === 'opcion' && j === q.correcta ? 'style="color:var(--ok);font-weight:700"' : ''}>${esc(o)}</li>`).join('') + '</ol>' : ''}${q.tipo === 'vf' ? `<div class="small">Correcta: ${q.correcta === 'V' ? 'Verdadero' : 'Falso'}</div>` : ''}${q.tipo === 'numerica' ? `<div class="small">Correcta: ${esc(q.correcta)}</div>` : ''}${q.explicacion ? `<div class="small mut">💡 ${esc(q.explicacion)}</div>` : ''}${q.modelo ? `<div class="small mut">Pauta: ${esc(q.modelo)}</div>` : ''}</label>`).join('') + '<button class="btn gold block" id="iaadd">➕ Agregar las seleccionadas a la sesión</button>';
+      $('#iaadd').onclick = () => { const sel = $$('.iasel').filter(x => x.checked).map(x => d.preguntas[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos una.'); agregar(sel.map(limpiarGen)); };
     } catch (er) { $('#iar').innerHTML = `<div class="err">${esc(er.message)}</div>`; if (er.code === 'SESION_EXPIRADA') manejar(er); }
     b.disabled = false; b.textContent = '✨ Generar preguntas';
   };
@@ -742,7 +787,7 @@ function montarIA(e, agregar) {
 function montarClaseIA(e, agregar, getCtx) {
   const box = $('#iaq'); if (!box) return;
   box.insertAdjacentHTML('beforeend', `<div class="card"><h3>🎨 Generar una clase completa</h3><p class="small mut">Crea una presentación atractiva (portada, viñetas, ideas destacadas e imágenes acordes) con actividades intercaladas, usando el tema, la sesión y el documento de arriba. Después puedes editar todo directamente sobre las diapositivas.</p>
-  <div class="grid2"><div><label>Diapositivas</label><input id="ids" type="number" min="3" max="14" value="8"></div><div><label class="row" style="margin:20px 0 0;font-weight:500"><input type="checkbox" id="ida" checked style="width:20px;min-height:0;height:20px"> Intercalar actividades</label><label class="row" style="margin:6px 0 0;font-weight:500"><input type="checkbox" id="idi" checked style="width:20px;min-height:0;height:20px"> Buscar imágenes automáticamente</label></div></div>
+  <div class="grid2"><div><label>Diapositivas</label><input id="ids" type="number" min="3" max="14" value="8"><div class="hint">Documento largo: usa 12 a 14 para cubrirlo completo.</div></div><div><label class="row" style="margin:20px 0 0;font-weight:500"><input type="checkbox" id="ida" checked style="width:20px;min-height:0;height:20px"> Intercalar actividades</label><label class="row" style="margin:6px 0 0;font-weight:500"><input type="checkbox" id="idi" checked style="width:20px;min-height:0;height:20px"> Buscar imágenes automáticamente</label></div></div>
   <button class="btn gold block" id="idg" style="margin-top:12px">🎨 Generar clase</button><div id="idr"></div></div>`);
   $('#idg').onclick = async () => {
     const b = $('#idg'), out = $('#idr'); b.disabled = true; b.textContent = 'Diseñando la clase…'; out.innerHTML = '';
@@ -758,8 +803,8 @@ function montarClaseIA(e, agregar, getCtx) {
         await Promise.all([tarea2(), tarea2(), tarea2()]);
       }
       let kfx = 0; pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; if (p.imagen && ['imagen-derecha', 'imagen-izquierda', 'dividido'].includes(p.layout)) { p.forma = 'tarjeta'; p.fx = ['inclinado', '', 'polaroid', 'flotante'][kfx++ % 4]; } else if (p.imagen && ['fondo', 'portada'].includes(p.layout) && !p.mov) p.fx = 'zoom'; });
-      out.innerHTML = `<h3 style="margin-top:14px">Vista previa (${pasos.length} pasos)</h3>` + pasos.map((p, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="idsel" data-i="${i}" checked style="width:20px;min-height:0;height:20px;vertical-align:middle"> <span class="chip ${p.tipo === 'diapositiva' ? 'navy' : 'warn'}">${ICONO[p.tipo] || ''} ${i + 1} · ${p.tipo === 'diapositiva' ? 'Diapositiva' : TIPOS[p.tipo] || p.tipo}</span>${p.tipo === 'diapositiva' ? `<div class="mini" style="max-width:380px;margin-top:8px">${slideStage(p, false)}</div>` : `<div class="small" style="margin-top:6px"><b>${esc(p.pregunta)}</b></div>`}</label>`).join('') + '<button class="btn gold block" id="idadd">➕ Agregar la clase seleccionada</button>';
-      $('#idadd').onclick = () => { const sel = $$('.idsel').filter(x => x.checked).map(x => pasos[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos un paso.'); agregar(sel); };
+      out.innerHTML = `<h3 style="margin-top:14px">Vista previa (${pasos.length} pasos)</h3>${avisoGen(d)}` + pasos.map((p, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="idsel" data-i="${i}" ${marcado(p)} style="width:20px;min-height:0;height:20px;vertical-align:middle"> <span class="chip ${p.tipo === 'diapositiva' ? 'navy' : 'warn'}">${ICONO[p.tipo] || ''} ${i + 1} · ${p.tipo === 'diapositiva' ? 'Diapositiva' : TIPOS[p.tipo] || p.tipo}</span> ${insignia(p)}${p.tipo === 'diapositiva' ? `<div class="mini" style="max-width:380px;margin-top:8px">${slideStage(p, false)}</div>` : `<div class="small" style="margin-top:6px"><b>${esc(p.pregunta)}</b></div>`}</label>`).join('') + '<button class="btn gold block" id="idadd">➕ Agregar la clase seleccionada</button>';
+      $('#idadd').onclick = () => { const sel = $$('.idsel').filter(x => x.checked).map(x => pasos[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos un paso.'); agregar(sel.map(limpiarGen)); };
     } catch (er) { out.innerHTML = `<div class="err">${esc(er.message)}</div>`; if (er.code === 'SESION_EXPIRADA') manejar(er); }
     b.disabled = false; b.textContent = '🎨 Generar clase';
   };
