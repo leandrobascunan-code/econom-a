@@ -192,7 +192,15 @@ async function vCtrl() {
     else { n.textContent = v.dur + ' s'; n.classList.remove('urg'); if (b) b.style.width = '100%'; }
   }, 250);
 }
-async function accionVivo(d) {
+async function autorizarCtrl(ruts) { try { const d = await API.call('docAutorizar', { sesion: T.sel, ruts }); toast(`✅ Autorizado${d.autorizados === 1 ? '' : 's'}: ${d.autorizados}`); await refrescarCtrl(true); } catch (e) { manejar(e); } }
+/** Aviso solo en el Control del docente (nunca mientras se proyecta en este equipo). */
+function avisarSalidas(c) {
+  const ahora = new Set((c.suspendidos || []).map(x => x.rut)); const pidieron = new Set((c.suspendidos || []).filter(x => x.pidio).map(x => x.rut));
+  if (T.suspPrev && !document.querySelector('.proj')) {
+    (c.suspendidos || []).forEach(x => { if (!T.suspPrev.has(x.rut)) { toast(`⚠️ ${x.nombre} salió de la aplicación`, 5000); try { navigator.vibrate && navigator.vibrate(160); } catch (e) { } } else if (x.pidio && !T.pidPrev.has(x.rut)) { toast(`🙋 ${x.nombre} pide autorización`, 6000); try { navigator.vibrate && navigator.vibrate([160, 80, 160]); } catch (e) { } } });
+  }
+  T.suspPrev = ahora; T.pidPrev = pidieron;
+}async function accionVivo(d) {
   if (T.busy) return; T.busy = true; $$('.remote .btn').forEach(b => b.disabled = true);
   const q = { ...d }; if (['avanzar', 'anterior', 'siguiente', 'ir'].includes(q.op)) q.auto = T.auto.lanzar;
   if (!q.ritmo && T.cv && T.cv.v.ritmo !== 'docente' && q.op !== 'tiempo') q.ritmo = 'docente';   // al mover, se activa el modo en vivo solo
@@ -211,7 +219,10 @@ async function refrescarCtrl(forzar, datos) {
   if (sig === T.sig && key === T.ckey && !forzar) return;
   T.sig = sig;
   const chips = arr => arr.map(n => `<span class="chip">${esc(n)}</span>`).join('');
-  let h = `<div class="card"><div class="row"><span class="chip navy">${p ? p.idx + 1 : 0} / ${c.n}</span><span class="chip ${enVivo ? 'ok' : ''}">${enVivo ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes}</span>${enVivo ? `<span class="chip ${c.viendo >= c.presentes && c.presentes ? 'ok' : 'warn'}" title="Estudiantes que ya ven este mismo paso">👁 ${c.viendo}/${c.presentes}</span>` : ''}</div>`;
+  avisarSalidas(c);
+  const susp = c.suspendidos || []; const hace = x => { const m = Math.max(0, Math.round((Date.now() + c.off - x.desde) / 60000)); return m < 1 ? 'hace un momento' : 'hace ' + m + ' min'; };
+  let h = susp.length ? `<div class="card" style="border:2px solid var(--bad)"><div class="row"><b class="sp" style="color:var(--bad)">🔒 Salieron de la aplicación (${susp.length})</b>${susp.length > 1 ? '<button class="btn sm gold" id="au-all">Autorizar a todos</button>' : ''}</div>${susp.map(x => `<div class="row" style="margin-top:8px;gap:8px"><div class="sp"><b>${esc(x.nombre)}</b><div class="small mut">Salió ${hace(x)}</div></div>${x.pidio ? '<span class="chip warn">🙋 Pide autorización</span>' : ''}<button class="btn sm gold" data-au="${esc(x.rut)}">Autorizar</button></div>`).join('')}</div>` : '';
+  h += `<div class="card"><div class="row"><span class="chip navy">${p ? p.idx + 1 : 0} / ${c.n}</span><span class="chip ${enVivo ? 'ok' : ''}">${enVivo ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes}</span>${enVivo ? `<span class="chip ${c.viendo >= c.presentes && c.presentes ? 'ok' : 'warn'}" title="Estudiantes que ya ven este mismo paso">👁 ${c.viendo}/${c.presentes}</span>` : ''}</div>`;
   if (p) {
     if (!act && p.tipo === 'diapositiva') h += `<div style="margin:12px auto 0;max-width:520px" class="mini">${slideStage(p, false)}</div>`;
     else if (!act) h += `<h3 style="margin-top:12px">${esc(p.titulo || 'Archivo o enlace')}</h3><p class="mut small">Archivo o enlace incrustado.</p>`;
@@ -233,6 +244,7 @@ async function refrescarCtrl(forzar, datos) {
   <div class="row" style="margin-top:10px"><select id="rj" style="flex:1">${c.pasos.map(q => `<option value="${q.i}" ${q.i === v.paso ? 'selected' : ''}>${q.i + 1}. ${esc((q.titulo || '').slice(0, 40))} · ${q.tipo}</option>`).join('')}</select><button class="btn sm ghost" id="rt">Ir</button></div>
   ${enVivo ? '<button class="btn sm ghost block" id="bfin" style="margin-top:10px">Terminar modo en vivo (ritmo libre)</button>' : '<div class="info">Ritmo libre: los estudiantes avanzan solos. Con la flecha ▶ inicias la clase en vivo.</div>'}</div><div class="remote-pad"></div>`;
   $('#cv').innerHTML = h;
+  $$('[data-au]').forEach(b => b.onclick = () => autorizarCtrl([b.dataset.au])); if ($('#au-all')) $('#au-all').onclick = () => autorizarCtrl(susp.map(x => x.rut));
   const ev = (id, f) => { const e = $(id); if (e) e.onclick = f; };
   $$('[data-dt]').forEach(b => b.onclick = () => accionVivo({ op: 'tiempo', delta: +b.dataset.dt }));
   ev('#bres', () => accionVivo({ op: 'resultados' })); ev('#bana', () => { analizar('paso'); });
@@ -282,7 +294,7 @@ function proyectar() {
   x.onclick = cerrar;
   const esc_ = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', esc_);
   const pintar = async () => {
-    let c; try { c = await API.call('docVivo', { sesion: T.sel }); } catch (e) { return; }
+    let c; try { c = await API.call('docVivo', { sesion: T.sel, proy: true }); } catch (e) { return; }
     c.off = c.v.ahora - Date.now(); w._c = c; const v = c.v, p = c.paso; let cuerpo = '';
     const sig = JSON.stringify({ ...c, off: 0, v: { ...c.v, ahora: 0 } }); if (sig === w._sig) return; w._sig = sig;   // sin parpadeo si nada cambió
     if (!p) cuerpo = '<h1>Sin contenido</h1>';
@@ -417,11 +429,12 @@ function modalEstilo(ed, rerender, global) {
   const slides = $$('#pasos .edslide'); if (!slides.length) return toast('Aún no hay diapositivas.');
   const base = ed || slides[0];
   const val = k => { const e = $(`[data-k="${k}"]`, base); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
-  const m0 = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || PH_IMG, layout: val('layout'), tema: val('tema'), fx: val('fx'), forma: val('forma') || 'completa', filtro: val('filtro'), mov: val('mov'), movvel: val('movvel') || 'normal', obj: val('obj'), objmov: val('objmov') || 'navegar', objw: val('objw') || 24, objy: val('objy') === '' ? 58 : val('objy'), video: val('video'), vaudio: val('vaudio'), vauto: val('vauto'), vloop: val('vloop'), vctrl: val('vctrl'), vini: val('vini') };
+  const m0 = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || PH_IMG, layout: val('layout'), tema: val('tema'), fx: val('fx'), forma: val('forma') || 'completa', filtro: val('filtro'), mov: val('mov'), movx: val('movx'), movy: val('movy'), movvel: val('movvel') || 'normal', obj: val('obj'), objmov: val('objmov') || 'navegar', objw: val('objw') || 24, objy: val('objy') === '' ? 58 : val('objy'), video: val('video'), vaudio: val('vaudio'), vauto: val('vauto'), vloop: val('vloop'), vctrl: val('vctrl'), vini: val('vini') };
   const opts = (obj, actual, vacio) => (global ? '<option value="__">(no cambiar)</option>' : '') + (vacio ? `<option value="" ${!global && !actual ? 'selected' : ''}>${vacio}</option>` : '') + Object.entries(obj).map(([k, v]) => `<option value="${k}" ${!global && actual === k ? 'selected' : ''}>${v}</option>`).join('');
   const m = document.createElement('div'); m.className = 'modal';
   m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">${global ? '🎨 Estilo de toda la presentación' : '✨ Efectos y movimiento de la diapositiva'}</h3><button type="button" class="btn sm ghost" id="ex" aria-label="Cerrar">✕</button></div>
   <div class="fxprev" id="fxp"></div>
+  <div class="card" style="margin:10px 0;background:var(--bg)"><div class="row"><b class="sp">🪄 Movimiento inteligente</b><button type="button" class="btn sm gold" id="${global ? 's_aiall' : 's_ai'}">${global ? 'Sugerir según cada imagen' : 'Analizar imagen y sugerir'}</button></div><div id="s_sug" class="small mut" style="margin-top:6px">La IA reconoce qué muestra la imagen (barco, personas, ciudad, campo, gráfico…) y propone el movimiento que mejor le va. Sin IA disponible, se basa en el texto de la diapositiva.</div></div>
   <div class="grid2"><div><label>Diseño</label><select id="s_lay">${opts(LAYOUTS, m0.layout)}</select></div><div><label>Color</label><select id="s_tema">${opts(TEMAS, m0.tema)}</select></div>
   <div><label>Efecto 3D / animación</label><select id="s_fx">${opts(FXS, m0.fx, 'Ninguno')}</select></div><div><label>Forma de la imagen</label><select id="s_forma">${opts(FORMAS_IMG, m0.forma)}</select></div>
   <div><label>Movimiento de la imagen</label><select id="s_mov">${opts(MOVS, m0.mov, 'Sin movimiento')}</select></div><div><label>Velocidad</label><select id="s_vel">${opts(VELS, m0.movvel)}</select></div>
@@ -439,14 +452,31 @@ function modalEstilo(ed, rerender, global) {
   const pint = () => { const o = { ...m0, layout: v_('s_lay', m0.layout), tema: v_('s_tema', m0.tema), fx: v_('s_fx', m0.fx), forma: v_('s_forma', m0.forma), filtro: v_('s_filtro', m0.filtro), mov: v_('s_mov', m0.mov), movvel: v_('s_vel', m0.movvel) }; if (!global) { o.obj = sel('s_obj'); o.objmov = sel('s_objmov'); o.objw = sel('s_objw'); o.objy = sel('s_objy'); } $('#fxp', m).innerHTML = `<div class="mini vivo">${slideStage(o, false)}</div>`; };
   $$('select, input[type=range]', m).forEach(s => s.onchange = s.oninput = pint); if ($('#s_obj', m)) $('#s_obj', m).oninput = pint; pint();
   if ($('#s_objup', m)) { $('#s_objup', m).onclick = () => $('#s_objf', m).click(); $('#s_objf', m).onchange = async ev => { const f = ev.target.files[0]; if (!f) return; $('#s_objup', m).textContent = 'Subiendo…'; try { const r = await subirArchivo(f, () => { }); $('#s_obj', m).value = urlDrive(r, 800); pint(); } catch (er) { toast(er.message, 5000); } $('#s_objup', m).textContent = '⬆ Subir'; }; }
-  $('#ex', m).onclick = cerrar; $('#s_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
+  const nombreMov = k => MOVS[k] || k;
+  const analizar = async (url, titulo, texto) => { try { return await API.call('docAnalizarImagen', { url, titulo, texto }); } catch (e) { if (e.code === 'SESION_EXPIRADA') throw e; const r = sugerirPorTexto(titulo + ' ' + texto + ' ' + url); return r; } };
+  if ($('#s_ai', m)) $('#s_ai', m).onclick = async () => {
+    const url = m0.imagen; const sug = $('#s_sug', m);
+    if (!url || url === PH_IMG || url.startsWith('data:')) return toast('Primero agrega una imagen a la diapositiva.');
+    sug.innerHTML = '<p><span class="spin"></span> Reconociendo la imagen…</p>';
+    let r; try { r = await analizar(url, m0.titulo, m0.texto); } catch (e) { sug.innerHTML = `<div class="err">${esc(e.message)}</div>`; return manejar(e); }
+    sug.innerHTML = `<div><b>Detecté:</b> ${esc(r.tipo)} — ${esc(r.descripcion)}${r.sinVision ? ' <span class="chip warn">según el texto de la diapositiva</span>' : ''}</div><div class="row" style="gap:6px;margin-top:8px">${r.propuestas.map((p, i) => `<button type="button" class="btn sm ghost" data-pi="${i}" title="${esc(p.motivo)}">${esc(nombreMov(p.mov))} · ${esc(VELS[p.velocidad] || p.velocidad)}</button>`).join('')}</div><div class="hint" id="s_why"></div>`;
+    const aplicar = i => { const p = r.propuestas[i]; $('#s_mov', m).value = p.mov; $('#s_vel', m).value = p.velocidad; m0.movx = r.foco.x; m0.movy = r.foco.y; $('#s_why', m).textContent = '💡 ' + p.motivo; $$('[data-pi]', m).forEach(b => b.classList.toggle('gold', +b.dataset.pi === i)); pint(); };
+    $$('[data-pi]', m).forEach(b => b.onclick = () => aplicar(+b.dataset.pi)); aplicar(0);
+  };
+  if ($('#s_aiall', m)) $('#s_aiall', m).onclick = async () => {
+    const con = slides.filter(s => { const u = $('[data-k="imagen"]', s).value; return u && !u.startsWith('data:'); }); const sug = $('#s_sug', m);
+    if (!con.length) return toast('Ninguna diapositiva tiene imagen.');
+    let i = 0, hechas = 0; sug.innerHTML = `<p><span class="spin"></span> Reconociendo imágenes… 0/${con.length}</p>`;
+    const tarea = async () => { while (i < con.length) { const s = con[i++]; const url = $('[data-k="imagen"]', s).value; const r = await analizar(url, ($('[data-k="titulo"]', s).innerText || ''), ($('[data-k="texto"]', s).innerText || '')); const p = r.propuestas[0]; $('[data-k="mov"]', s).value = p.mov; $('[data-k="movvel"]', s).value = p.velocidad; $('[data-k="movx"]', s).value = r.foco.x; $('[data-k="movy"]', s).value = r.foco.y; hechas++; sug.innerHTML = `<p><span class="spin"></span> Reconociendo imágenes… ${hechas}/${con.length}</p>`; } };
+    try { await Promise.all([tarea(), tarea(), tarea()]); sug.innerHTML = `<div class="fb ok">✅ Movimiento elegido para ${con.length} diapositiva(s) según lo que muestra cada imagen. Pulsa «Aplicar» para verlo.</div>`; } catch (e) { sug.innerHTML = `<div class="err">${esc(e.message)}</div>`; manejar(e); }
+  };  $('#ex', m).onclick = cerrar; $('#s_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
   $('#s_ok', m).onclick = () => {
     const todos = global || ($('#s_all', m) && $('#s_all', m).checked); const objetivos = todos ? slides : [base];
     objetivos.forEach(s => {
       const set = (k, id) => { const x = sel(id); if (x === '__') return; const e = $(`[data-k="${k}"]`, s); if (e) e.value = x; };
       set('layout', 's_lay'); set('tema', 's_tema'); set('fx', 's_fx'); set('forma', 's_forma'); set('filtro', 's_filtro'); set('mov', 's_mov'); set('movvel', 's_vel');
     });
-    if (!global) { const put = (k, id) => { const e = $(`[data-k="${k}"]`, base); if (e) e.value = sel(id); }; put('obj', 's_obj'); put('objmov', 's_objmov'); put('objw', 's_objw'); put('objy', 's_objy'); }
+    if (!global) { const put = (k, id) => { const e = $(`[data-k="${k}"]`, base); if (e) e.value = sel(id); }; put('obj', 's_obj'); put('objmov', 's_objmov'); put('objw', 's_objw'); put('objy', 's_objy'); const fx_ = $('[data-k="movx"]', base), fy_ = $('[data-k="movy"]', base); if (fx_) fx_.value = m0.movx ?? ''; if (fy_) fy_.value = m0.movy ?? ''; }
     cerrar(); rerender();
   };
 }
@@ -523,7 +553,7 @@ function tiempoDefCliente(t) { return { opcion: 20, vf: 15, numerica: 40, encues
 function pasoForm(p, i) {
   let f = '';
   if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
-  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm" data-a="fx">✨ Efectos</button><button class="btn sm" data-a="vid">🎬 Video</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><input type="hidden" data-k="fx" value="${esc(p.fx || '')}"><input type="hidden" data-k="forma" value="${esc(p.forma || '')}"><input type="hidden" data-k="filtro" value="${esc(p.filtro || '')}">${['mov', 'movvel', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].map(k => `<input type="hidden" data-k="${k}" value="${esc(p[k] ?? '')}">`).join('')}<div class="imgpanel"></div></div>`;
+  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm" data-a="fx">✨ Efectos</button><button class="btn sm" data-a="vid">🎬 Video</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><input type="hidden" data-k="fx" value="${esc(p.fx || '')}"><input type="hidden" data-k="forma" value="${esc(p.forma || '')}"><input type="hidden" data-k="filtro" value="${esc(p.filtro || '')}">${['mov', 'movvel', 'movx', 'movy', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].map(k => `<input type="hidden" data-k="${k}" value="${esc(p[k] ?? '')}">`).join('')}<div class="imgpanel"></div></div>`;
   else f = preguntaEditor(p);
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
 }
@@ -532,7 +562,7 @@ function leerPasos() {
     const g = k => { const e = $(`[data-k="${k}"]`, c); if (!e) return undefined; return e.value !== undefined ? e.value : e.innerText.replace(/ /g, ' ').replace(/\n+$/, ''); };
     const p = { id: T.edit.pasos[+c.dataset.i]?.id || 'n' + Math.random().toString(36).slice(2, 7), tipo: g('tipo') };
     if (p.tipo === 'documento') { p.titulo = g('titulo'); p.texto = g('texto'); p.url = g('url'); p.driveId = g('driveId'); p.mime = g('mime'); return p; }
-    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); p.fx = g('fx'); p.forma = g('forma'); p.filtro = g('filtro'); ['mov', 'movvel', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].forEach(k => p[k] = g(k)); return p; }
+    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); p.fx = g('fx'); p.forma = g('forma'); p.filtro = g('filtro'); ['mov', 'movvel', 'movx', 'movy', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].forEach(k => p[k] = g(k)); return p; }
     p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1; if (+g('tiempo')) p.tiempo = +g('tiempo');
     if (g('titulo') !== undefined) p.titulo = g('titulo');
     if (p.tipo === 'opcion' || p.tipo === 'encuesta') { const ops = []; let corr = 0; $$('.q-tiles .tile', c).forEach(t => { const tx = ($('[data-opt]', t).innerText || '').trim(); if (!tx) return; if (t.classList.contains('ok')) corr = ops.length; ops.push(tx); }); p.opciones = ops; if (p.tipo === 'opcion') p.correcta = corr; }
@@ -723,8 +753,11 @@ function montarClaseIA(e, agregar, getCtx) {
         const con = pasos.filter(p => p.imagen_q); let i = 0, hechas = 0; out.innerHTML = `<p><span class="spin"></span> Buscando imágenes… 0/${con.length}</p>`;
         const worker = async () => { while (i < con.length) { const p = con[i++]; try { const r = await buscarImagenes(p.imagen_q); if (r[0]) { p.imagen = r[0].src; p.credito = r[0].credito; } } catch (er) { } hechas++; out.innerHTML = `<p><span class="spin"></span> Buscando imágenes… ${hechas}/${con.length}</p>`; } };
         await Promise.all([worker(), worker(), worker()]);
+        const conImg = pasos.filter(p => p.tipo === 'diapositiva' && p.imagen); let j = 0, listas = 0; out.innerHTML = `<p><span class="spin"></span> Eligiendo el movimiento acorde a cada imagen… 0/${conImg.length}</p>`;
+        const tarea2 = async () => { while (j < conImg.length) { const p = conImg[j++]; let r; try { r = await API.call('docAnalizarImagen', { url: p.imagen, titulo: p.titulo, texto: p.texto }); } catch (er) { r = sugerirPorTexto((p.imagen_q || '') + ' ' + p.titulo + ' ' + p.texto); } const pr = r.propuestas[0]; p.mov = pr.mov; p.movvel = pr.velocidad; p.movx = r.foco.x; p.movy = r.foco.y; listas++; out.innerHTML = `<p><span class="spin"></span> Eligiendo el movimiento acorde a cada imagen… ${listas}/${conImg.length}</p>`; } };
+        await Promise.all([tarea2(), tarea2(), tarea2()]);
       }
-      let kfx = 0; pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; if (p.imagen && ['imagen-derecha', 'imagen-izquierda', 'dividido'].includes(p.layout)) { p.forma = 'tarjeta'; p.fx = ['inclinado', '', 'polaroid', 'flotante'][kfx++ % 4]; } else if (p.imagen && ['fondo', 'portada'].includes(p.layout)) p.fx = 'zoom'; });
+      let kfx = 0; pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; if (p.imagen && ['imagen-derecha', 'imagen-izquierda', 'dividido'].includes(p.layout)) { p.forma = 'tarjeta'; p.fx = ['inclinado', '', 'polaroid', 'flotante'][kfx++ % 4]; } else if (p.imagen && ['fondo', 'portada'].includes(p.layout) && !p.mov) p.fx = 'zoom'; });
       out.innerHTML = `<h3 style="margin-top:14px">Vista previa (${pasos.length} pasos)</h3>` + pasos.map((p, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="idsel" data-i="${i}" checked style="width:20px;min-height:0;height:20px;vertical-align:middle"> <span class="chip ${p.tipo === 'diapositiva' ? 'navy' : 'warn'}">${ICONO[p.tipo] || ''} ${i + 1} · ${p.tipo === 'diapositiva' ? 'Diapositiva' : TIPOS[p.tipo] || p.tipo}</span>${p.tipo === 'diapositiva' ? `<div class="mini" style="max-width:380px;margin-top:8px">${slideStage(p, false)}</div>` : `<div class="small" style="margin-top:6px"><b>${esc(p.pregunta)}</b></div>`}</label>`).join('') + '<button class="btn gold block" id="idadd">➕ Agregar la clase seleccionada</button>';
       $('#idadd').onclick = () => { const sel = $$('.idsel').filter(x => x.checked).map(x => pasos[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos un paso.'); agregar(sel); };
     } catch (er) { out.innerHTML = `<div class="err">${esc(er.message)}</div>`; if (er.code === 'SESION_EXPIRADA') manejar(er); }

@@ -92,7 +92,7 @@ function textoRico(t) {
   });
   return html + (ul ? '</ul>' : '');
 }
-const MOVS = { 'paneo-der': 'Paneo → derecha', 'paneo-izq': 'Paneo ← izquierda', vaiven: 'Oleaje (vaivén)', navegar: 'Navegar (barco con olas)', flotar: 'Flotar', diagonal: 'Recorrido diagonal' };
+const MOVS = { 'paneo-der': 'Paneo → derecha', 'paneo-izq': 'Paneo ← izquierda', vaiven: 'Oleaje (vaivén)', navegar: 'Navegar (barco con olas)', flotar: 'Flotar', diagonal: 'Recorrido diagonal', 'zoom-foco': 'Acercarse al punto de interés', respirar: 'Respirar (zoom suave)', 'tilt-arriba': 'Subir (edificios, altura)', 'tilt-abajo': 'Bajar', brillo: 'Destello de luz', viento: 'Viento (campo, árboles)', travelling: 'Travelling rápido (transporte)' };
 const VELS = { lento: 'Lento', normal: 'Normal', rapido: 'Rápido' };
 const OBJMOVS = { navegar: 'Navegar de lado a lado', flotar: 'Flotar', volar: 'Volar en diagonal', girar: 'Girar' };
 const VAUDIOS = { silencio: 'Sin audio', audio: 'Con audio en todas las pantallas', proy: 'Audio solo en la proyección del docente' };
@@ -116,12 +116,32 @@ function slideStage(p, edit, opts) {
   let media = '';
   if (vid) media = opts.live ? `<div class="st-img st-vid"><iframe src="${esc(ytUrl(p, opts.proj))}" title="Video" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>` : `<div class="st-img st-vid"><img src="https://img.youtube.com/vi/${vid}/hqdefault.jpg" alt="" referrerpolicy="no-referrer"><span class="st-play">▶</span></div>`;
   else if (p.imagen) media = `<div class="st-img"><img src="${esc(p.imagen)}" alt="" referrerpolicy="no-referrer" draggable="false"></div>`;
+  const cl = v => Math.max(0, Math.min(100, Number(v))); const foco = (p.movx !== undefined && p.movx !== '' && p.movy !== undefined && p.movy !== '' && !isNaN(Number(p.movx)) && !isNaN(Number(p.movy))) ? ` style="--fx:${cl(p.movx)}%;--fy:${cl(p.movy)}%"` : '';
   const obj = p.obj ? `<img class="st-obj om-${OBJMOVS[p.objmov] ? p.objmov : 'navegar'}" src="${esc(p.obj)}" alt="" referrerpolicy="no-referrer" draggable="false" style="--ow:${Math.max(8, Math.min(60, Number(p.objw) || 24))}%;--oy:${Math.max(0, Math.min(80, p.objy === '' || p.objy === undefined ? 58 : Number(p.objy)))}%">` : '';
   const t = edit ? `<h2 class="st-t" contenteditable="plaintext-only" spellcheck="false" data-k="titulo" data-ph="Título">${esc(p.titulo)}</h2>` : `<h2 class="st-t">${esc(p.titulo)}</h2>`;
   const b = edit ? `<div class="st-b" contenteditable="plaintext-only" spellcheck="false" data-k="texto" data-ph="Escribe aquí… (usa «- » para viñetas)">${esc(p.texto)}</div>` : `<div class="st-b">${textoRico(p.texto)}</div>`;
-  return `<div class="stage th-${th} lay-${lay} ${hay ? 'con-img' : ''} ${fxCls}"><div class="st-deco"></div>${media}<div class="st-txt">${t}${b}</div>${obj}${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
+  return `<div class="stage th-${th} lay-${lay} ${hay ? 'con-img' : ''} ${fxCls}"${foco}><div class="st-deco"></div>${media}<div class="st-txt">${t}${b}</div>${obj}${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
 }
-/** Reduce el tamaño del texto de cada diapositiva hasta que quepa completo (nada se corta, ni arriba ni abajo). */
+/** Sin IA de visión: propone movimientos según palabras del título, el texto o la dirección de la imagen. */
+function sugerirPorTexto(txt) {
+  const t = String(txt || '').toLowerCase();
+  const R = [
+    [/barco|buque|nave|puerto|marítim|naveg|mar\b|oc[eé]ano|ship|port\b|cargo|vessel|sea\b|ocean/, 'barco o puerto', 'navegar', 'lento', 'vaiven', 'paneo-der', 50, 55],
+    [/persona|gente|trabajador|multitud|familia|estudiante|consumidor|ciudadan|people|worker|crowd|team|person/, 'personas', 'zoom-foco', 'lento', 'respirar', 'paneo-izq', 50, 38],
+    [/ciudad|edificio|banco|bolsa|rascacielo|skyline|torre|city|building|tower|stock/, 'ciudad o edificios', 'tilt-arriba', 'lento', 'paneo-der', 'respirar', 50, 40],
+    [/cami[oó]n|tren|avi[oó]n|carretera|transporte|log[ií]stic|contenedor|truck|train|plane|highway|container|transport/, 'transporte', 'travelling', 'normal', 'paneo-der', 'tilt-abajo', 50, 55],
+    [/dinero|moneda|billete|precio|inflaci|comercio|mercado|d[oó]lar|money|coin|price|market|trade|econom/, 'dinero o comercio', 'brillo', 'normal', 'respirar', 'zoom-foco', 50, 50],
+    [/gr[aá]fico|tabla|mapa|dato|infograf|chart|graph|map\b|table|statistic/, 'gráfico o mapa', 'zoom-foco', 'lento', 'paneo-izq', 'respirar', 50, 45],
+    [/campo|cultivo|agr[ií]col|cosecha|fruta|vi[ñn]a|vino|[aá]rbol|farm|crop|harvest|vineyard|wheat/, 'campo o cultivos', 'viento', 'lento', 'paneo-der', 'flotar', 50, 60],
+    [/paisaje|natural|monta[ñn]a|r[ií]o|lago|landscape|mountain|river|forest/, 'paisaje', 'paneo-der', 'lento', 'flotar', 'diagonal', 50, 50],
+    [/f[aá]brica|industria|miner[ií]a|cobre|planta|factory|industry|mine\b|copper/, 'industria', 'tilt-arriba', 'lento', 'travelling', 'respirar', 50, 45]
+  ];
+  const r = R.find(x => x[0].test(t));
+  const mk = (m, v, why) => ({ mov: m, velocidad: v, motivo: why });
+  if (!r) return { tipo: 'imagen', descripcion: 'No se pudo reconocer el contenido; se propone un movimiento suave general.', foco: { x: 50, y: 50 }, personas: false, sinVision: true, propuestas: [mk('zoom-foco', 'lento', 'Acercamiento suave al centro.'), mk('paneo-der', 'lento', 'Recorrido lateral lento.'), mk('respirar', 'lento', 'Zoom que respira.')] };
+  const por = { navegar: 'La imagen se mece como sobre las olas.', vaiven: 'Vaivén de oleaje.', 'paneo-der': 'Recorrido lateral lento.', 'zoom-foco': 'Acercamiento lento al punto de interés.', respirar: 'Zoom suave que respira.', 'paneo-izq': 'Recorrido lateral lento.', 'tilt-arriba': 'Sube mostrando la altura.', travelling: 'Barrido rápido que da sensación de avance.', 'tilt-abajo': 'Baja recorriendo la escena.', brillo: 'Destello de luz que da valor.', viento: 'Balanceo como el viento.', flotar: 'Flota suavemente.', diagonal: 'Recorrido diagonal.' };
+  return { tipo: r[1], descripcion: 'Según el texto, la imagen probablemente muestra ' + r[1] + '.', foco: { x: r[6], y: r[7] }, personas: r[1] === 'personas', sinVision: true, propuestas: [mk(r[2], r[3], por[r[2]]), mk(r[4], 'lento', por[r[4]]), mk(r[5], 'lento', por[r[5]])] };
+}/** Reduce el tamaño del texto de cada diapositiva hasta que quepa completo (nada se corta, ni arriba ni abajo). */
 function ajustarDiapos(root) {
   (root || document).querySelectorAll('.stage').forEach(st => {
     const box = st.querySelector('.st-txt'); if (!box || !st.clientWidth) return;

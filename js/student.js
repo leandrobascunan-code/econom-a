@@ -187,8 +187,9 @@ async function latir() {
 function pintarBloqueo() {
   if (!S.bloqueado) return;
   let ov = $('.lock'); if (!ov) { ov = document.createElement('div'); ov.className = 'lock'; document.body.appendChild(ov); }
-  ov.innerHTML = `<div class="box"><div class="ic">🔒</div><h1>Participación suspendida</h1><p>Saliste de la aplicación mientras participabas. Tu participación se detuvo.</p><p><b>Espera a que tu docente te autorice para volver.</b></p><p class="small" style="opacity:.8"><span class="spin" style="border-color:rgba(255,255,255,.3);border-top-color:#fff"></span> Verificando autorización…</p><button class="btn ghost" id="cl" style="color:#fff;border-color:rgba(255,255,255,.5)">Cerrar y volver al inicio</button></div>`;
+  ov.innerHTML = `<div class="box"><div class="ic">🔒</div><h1>Participación suspendida</h1><p>Saliste de la aplicación mientras participabas. Tu participación se detuvo.</p><p><b>Espera a que tu docente te autorice para volver.</b></p><p class="small" style="opacity:.8"><span class="spin" style="border-color:rgba(255,255,255,.3);border-top-color:#fff"></span> Verificando autorización…</p><button class="btn gold block" id="pa" style="margin:6px 0 10px">🙋 Pedir autorización al docente</button><button class="btn ghost" id="cl" style="color:#fff;border-color:rgba(255,255,255,.5)">Cerrar y volver al inicio</button></div>`;
   $('#cl').onclick = () => { ov.remove(); detenerPart(); S.bloqueado = false; inicio(); };
+  $('#pa').onclick = async ev => { const b = ev.target; b.disabled = true; try { await API.call('pedirAutorizacion', { sesion: S.ses.id }); b.textContent = '✅ Solicitud enviada. Espera la autorización.'; } catch (e) { b.disabled = false; toast(e.message, 4000); } };
   clearInterval(S.poll);
   S.poll = setInterval(async () => {
     if (document.hidden) return;

@@ -326,3 +326,21 @@ table.t tr:hover td{background:rgba(47,127,224,.06)}
 @keyframes objGir{to{transform:rotate(360deg)}}
 /* en miniaturas y galerías no se anima (ahorra batería); la vista previa de efectos sí */
 .mini:not(.vivo) .stage .st-img img,.mini:not(.vivo) .stage .st-obj,.mini:not(.vivo) .stage .st-img:before,.mini:not(.vivo) .stage .st-img:after{animation:none!important}
+/* ---- Movimientos según el contenido de la imagen ---- */
+.st-img img{transform-origin:var(--fx,50%) var(--fy,50%)}
+.mov-zoom-foco .st-img img{animation:mvZf calc(14s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-respirar .st-img img{animation:mvRe calc(6s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-tilt-arriba .st-img img{animation:mvTa calc(16s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-tilt-abajo .st-img img{animation:mvTb calc(16s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-viento .st-img img{transform-origin:50% 100%;animation:mvVi calc(4.5s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-travelling .st-img img{animation:mvTr calc(7s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-brillo .st-img img{animation:mvBr calc(9s*var(--dur,1)) ease-in-out infinite alternate}
+@keyframes mvZf{from{transform:scale(1.02)}to{transform:scale(1.42)}}
+@keyframes mvRe{from{transform:scale(1.03)}to{transform:scale(1.11)}}
+@keyframes mvTa{from{transform:scale(1.3) translateY(8%)}to{transform:scale(1.3) translateY(-8%)}}
+@keyframes mvTb{from{transform:scale(1.3) translateY(-8%)}to{transform:scale(1.3) translateY(8%)}}
+@keyframes mvVi{from{transform:scale(1.12) rotate(-1.8deg) skewX(-1.2deg)}to{transform:scale(1.12) rotate(1.8deg) skewX(1.2deg)}}
+@keyframes mvTr{from{transform:scale(1.35) translateX(-11%)}to{transform:scale(1.35) translateX(11%)}}
+@keyframes mvBr{from{transform:scale(1.02)}to{transform:scale(1.09)}}
+.mov-brillo .st-img:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.55) 50%,transparent 62%);background-size:260% 100%;animation:brillo calc(4.5s*var(--dur,1)) ease-in-out infinite}
+@keyframes brillo{0%{background-position:130% 0}60%,100%{background-position:-130% 0}}
