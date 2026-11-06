@@ -95,16 +95,17 @@ async function autorizar(ruts) { try { const d = await API.call('docAutorizar', 
 /* ---------- Envío de correos con PRUEBA ---------- */
 function modalEnvio({ titulo, cuerpo, onSend }) {
   const m = document.createElement('div'); m.className = 'modal';
-  m.innerHTML = `<div class="box"><h3>${titulo}</h3>${cuerpo}<div id="mres"></div><div class="row" style="margin-top:14px"><button class="btn gold" id="mp">🧪 Enviar prueba a mi correo</button><button class="btn" id="mt">Enviar a todos</button><button class="btn ghost" id="mc">Cerrar</button></div><div class="hint">La prueba te llega solo a ti, con los datos de un estudiante real como ejemplo, para que veas cómo lo recibe. Recomendado antes de enviar a todos.</div></div>`;
+  m.innerHTML = `<div class="box"><div class="row"><h3 class="sp" style="margin:0">${titulo}</h3><button type="button" class="btn sm ghost" id="mx" aria-label="Cerrar">✕</button></div>${cuerpo}<div id="mres"></div><div class="row" style="margin-top:14px"><button class="btn gold" id="mp">🧪 Enviar prueba a mi correo</button><button class="btn" id="mt">Enviar a todos</button><button class="btn ghost" id="mc">Cerrar</button></div><div class="hint">La prueba te llega solo a ti, con los datos de un estudiante real como ejemplo, para que veas cómo lo recibe. Recomendado antes de enviar a todos.</div></div>`;
   document.body.appendChild(m);
   const run = async prueba => {
     if (!prueba && !confirm('¿Enviar a todos los estudiantes?')) return;
-    $$('.btn', m).forEach(b => b.disabled = true); $('#mres', m).innerHTML = '<p><span class="spin"></span> Enviando…</p>';
+    $$('#mp, #mt', m).forEach(b => b.disabled = true); $('#mres', m).innerHTML = '<p><span class="spin"></span> Enviando…</p>';
     try { $('#mres', m).innerHTML = `<div class="fb ok" style="margin-top:12px">${await onSend(prueba, m)}</div>`; }
-    catch (e) { $('#mres', m).innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') { m.remove(); manejar(e); return; } }
-    $$('.btn', m).forEach(b => b.disabled = false);
+    catch (e) { $('#mres', m).innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') { cerrarM(); manejar(e); return; } }
+    $$('#mp, #mt', m).forEach(b => b.disabled = false);
   };
-  $('#mp', m).onclick = () => run(true); $('#mt', m).onclick = () => run(false); $('#mc', m).onclick = () => m.remove();
+  $('#mp', m).onclick = () => run(true); $('#mt', m).onclick = () => run(false); const cerrarM = () => { m.remove(); document.removeEventListener('keydown', escM); }; const escM = e => { if (e.key === 'Escape') cerrarM(); }; document.addEventListener('keydown', escM);
+  $('#mc', m).onclick = cerrarM; $('#mx', m).onclick = cerrarM; m.onclick = e => { if (e.target === m) cerrarM(); };
 }
 async function lotes(accion, datos, tope = 30) {
   let desde = 0, ok = 0, fallos = 0, ult = null;
@@ -200,7 +201,7 @@ async function refrescarCtrl(forzar) {
     else h += `<h3 style="margin-top:12px">${esc(p.pregunta)}</h3>${tilesDocente(p)}`;
   }
   h += '</div>';
-  if (act && enVivo && ['espera', 'pregunta'].includes(v.fase)) h += `<div class="card"><div class="small mut c">${v.fase === 'espera' ? 'Tiempo para responder' : 'Tiempo restante'}</div><div class="tb-num" id="ctm">${v.dur} s</div><div class="tb-bar"><i id="ctb" style="width:100%"></i></div><div class="row" style="justify-content:center;margin-top:10px"><button class="btn sm ghost" data-t="-5">−5 s</button><button class="btn sm ghost" data-t="10">+10 s</button></div></div>`;
+  if (act && enVivo && ['espera', 'pregunta'].includes(v.fase)) h += `<div class="card"><div class="small mut c">${v.fase === 'espera' ? 'Tiempo para responder' : 'Tiempo restante'}</div><div class="tb-num" id="ctm">${v.dur} s</div><div class="tb-bar"><i id="ctb" style="width:100%"></i></div><div class="row" style="justify-content:center;margin-top:10px"><button class="btn sm ghost" data-dt="-5">−5 s</button><button class="btn sm ghost" data-dt="10">+10 s</button></div></div>`;
   if (act && enVivo && v.fase !== 'espera') {
     const pc = c.presentes ? Math.round(c.respondieron / c.presentes * 100) : 0;
     h += `<div class="card"><div class="row"><b class="sp">✍️ ${c.respondieron} de ${c.presentes} respondieron</b><b>${pc}%</b></div><div class="bar" style="margin-top:8px"><i style="width:${pc}%"></i></div>`;
@@ -216,7 +217,7 @@ async function refrescarCtrl(forzar) {
   ${enVivo ? '<button class="btn sm ghost block" id="bfin" style="margin-top:10px">Terminar modo en vivo (ritmo libre)</button>' : '<div class="info">Ritmo libre: los estudiantes avanzan solos. Con la flecha ▶ inicias la clase en vivo.</div>'}</div><div class="remote-pad"></div>`;
   $('#cv').innerHTML = h;
   const ev = (id, f) => { const e = $(id); if (e) e.onclick = f; };
-  $$('[data-t]').forEach(b => b.onclick = () => accionVivo({ op: 'tiempo', delta: +b.dataset.t }));
+  $$('[data-dt]').forEach(b => b.onclick = () => accionVivo({ op: 'tiempo', delta: +b.dataset.dt }));
   ev('#bres', () => accionVivo({ op: 'resultados' })); ev('#bana', () => { analizar('paso'); $('#aires').scrollIntoView({ behavior: 'smooth' }); });
   ev('#bcer', () => accionVivo({ op: 'cerrar' })); ev('#bana2', () => { analizar('paso'); $('#aires').scrollIntoView({ behavior: 'smooth' }); }); ev('#bana3', () => { analizar('sesion'); $('#aires').scrollIntoView({ behavior: 'smooth' }); });
   ev('#brk', () => accionVivo({ op: 'ranking' })); ev('#bcor', corregirAhora); ev('#rt', () => accionVivo({ op: 'ir', paso: +$('#rj').value })); ev('#bfin', () => accionVivo({ ritmo: 'libre' }));
@@ -251,19 +252,23 @@ function proyectar() {
   const base = location.href.replace(/docente\.html.*$/, '') + 'index.html?s=' + encodeURIComponent(T.sel);
   const w = document.createElement('div'); w.className = 'proj'; document.body.appendChild(w);
   try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => { }); } catch (e) { }
-  const cerrar = () => { clearInterval(w._t); clearInterval(w._k); w.remove(); document.removeEventListener('keydown', esc_); try { document.fullscreenElement && document.exitFullscreen(); } catch (e) { } };
+  const x = document.createElement('button'); x.type = 'button'; x.className = 'proj-x'; x.textContent = '✕ Cerrar'; document.body.appendChild(x);   // botón fijo: siempre se puede cerrar
+  const cerrar = () => { clearInterval(w._t); clearInterval(w._k); w.remove(); x.remove(); document.removeEventListener('keydown', esc_); try { document.fullscreenElement && document.exitFullscreen(); } catch (e) { } };
+  x.onclick = cerrar;
   const esc_ = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', esc_);
   const pintar = async () => {
     let c; try { c = await API.call('docVivo', { sesion: T.sel }); } catch (e) { return; }
     c.off = c.v.ahora - Date.now(); w._c = c; const v = c.v, p = c.paso; let cuerpo = '';
+    const sig = JSON.stringify({ ...c, off: 0, v: { ...c.v, ahora: 0 } }); if (sig === w._sig) return; w._sig = sig;   // sin parpadeo si nada cambió
     if (!p) cuerpo = '<h1>Sin contenido</h1>';
-    else if (!ESACT(p)) cuerpo = `<h1>${esc(p.titulo || '')}</h1><div style="font-size:1.5rem">${p.texto ? md(p.texto) : ''}</div>${bloqueEmbed(p)}`;
+    else if (p.tipo === 'diapositiva') cuerpo = `<div style="max-width:min(1100px,150vh);margin:0 auto">${slideStage(p, false)}</div>`;
+    else if (!ESACT(p)) cuerpo = `<h1>${esc(p.titulo || '')}</h1>${bloqueEmbed(p)}`;
     else if (v.fase === 'ranking') cuerpo = `<h1>🏆 Ranking</h1><div style="max-width:700px">${podioHtml(c.ranking, '')}</div>`;
     else if (v.fase === 'espera') cuerpo = `<h1>${esc(p.pregunta)}</h1>${tilesDocente({ ...p, correcta: -1 })}<p class="mut">Prepárate…</p>`;
     else if (v.fase === 'pregunta') cuerpo = `<div class="row"><h1 class="sp">${esc(p.pregunta)}</h1><b id="ptm" style="font:800 4rem Poppins;color:#ffd23f"></b></div>${tilesDocente({ ...p, correcta: -1 })}<p style="font-size:1.4rem">✍️ ${c.agregado ? c.agregado.n : 0} / ${c.presentes} respondieron</p>`;
     else cuerpo = `<h1>${esc(p.pregunta)}</h1><div style="background:var(--card);color:var(--ink);border-radius:20px;padding:16px">${p.tipo === 'abierta' ? `<p>${c.agregado.n} respuestas</p>` : aggHtml(p, c.agregado, p.correcta)}</div>${v.retro ? `<div class="card retro" style="color:var(--ink);margin-top:14px"><b>🧑‍🏫 Retroalimentación</b><p style="font-size:1.2rem">${md(v.retro)}</p></div>` : ''}`;
-    w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip">👥 ${c.presentes}</span><button class="btn sm ghost" id="pcl" style="color:#fff;border-color:#fff8">Cerrar (Esc)</button></div>${cuerpo}${v.paso === 0 && v.fase !== 'pregunta' ? '<div class="row qrbox" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div>' : ''}</div>`;
-    $('#pcl').onclick = cerrar; if ($('#pqr')) new QRCode($('#pqr'), { text: base, width: 140, height: 140, correctLevel: QRCode.CorrectLevel.M });
+    w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip">👥 ${c.presentes}</span></div>${cuerpo}${v.paso === 0 && v.fase !== 'pregunta' ? '<div class="row qrbox" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div>' : ''}</div>`;
+    if ($('#pqr')) new QRCode($('#pqr'), { text: base, width: 140, height: 140, correctLevel: QRCode.CorrectLevel.M });
   };
   w._k = setInterval(() => { const c = w._c; if (!c || c.v.fase !== 'pregunta') return; const n = $('#ptm'); if (n) n.textContent = Math.max(0, Math.ceil((c.v.t + c.v.dur * 1000 - (Date.now() + c.off)) / 1000)); }, 250);
   pintar(); w._t = setInterval(pintar, 2000);
@@ -638,7 +643,7 @@ function vCfg() {
   $('#main').innerHTML = `<div class="card"><h3>Ajustes generales</h3>${f('colegio', 'Establecimiento')}${f('asignatura', 'Asignatura')}${f('nombre_unidad', 'Nombre de la unidad')}${f('docente', 'Nombre del docente (aparece en informes)')}${f('total_sesiones', 'Total de sesiones planificadas', 'Se usa para calcular el progreso. Puedes cambiarlo cuando quieras (14 por defecto).')}${f('cursos', 'Cursos (separados por coma)', 'Aparecen como opciones al inscribirse.')}${f('exigencia', '% de exigencia para la nota 4,0')}${f('logo_url', 'URL del logo para los informes (opcional)')}
   <label>¿Los estudiantes pueden descargar su informe?</label><select data-c="informe_visible"><option value="NO" ${c.informe_visible !== 'SI' ? 'selected' : ''}>No (solo yo)</option><option value="SI" ${c.informe_visible === 'SI' ? 'selected' : ''}>Sí</option></select>
   <label>Enviar copia por correo al estudiante cuando termina de participar</label><select data-c="correo_auto"><option value="SI" ${c.correo_auto !== 'NO' ? 'selected' : ''}>Sí, automáticamente</option><option value="NO" ${c.correo_auto === 'NO' ? 'selected' : ''}>No (solo cuando yo la envíe)</option></select><div class="hint">Los correos salen desde tu cuenta de Google. Cuenta personal: ~100 por día; Google Workspace: ~1.500.</div>
-  ${f('url_app', 'Dirección (URL) de la plataforma para los estudiantes', 'Es el enlace que llevan los correos. Ej: https://leandrobascunan-code.github.io/econom-a/')}${f('modelo_ia', 'Modelo de IA (Groq)', 'Estado de la clave de IA: ' + (c.tiene_ia ? '✅ configurada' : '❌ falta GROQ_API_KEY en las propiedades del script'))}
+  ${f('correo_docente', 'Correo del docente (para pruebas)', 'Aquí llegan los correos de prueba. Escríbelo una vez. Los correos reales a estudiantes salen desde tu cuenta de Google.')}${f('url_app', 'Dirección (URL) de la plataforma para los estudiantes', 'Es el enlace que llevan los correos. Ej: https://leandrobascunan-code.github.io/econom-a/')}${f('modelo_ia', 'Modelo de IA (Groq)', 'Estado de la clave de IA: ' + (c.tiene_ia ? '✅ configurada' : '❌ falta GROQ_API_KEY en las propiedades del script'))}
   <button class="btn block" id="gc" style="margin-top:14px">Guardar ajustes</button></div>
   <div class="card"><h3>Datos</h3><p class="small mut">Toda la información (estudiantes, asistencia, respuestas y eventos de salida/reingreso) queda en tu planilla de Google.</p><a class="btn ghost" target="_blank" rel="noopener" href="${esc(T.planilla || '#')}">Abrir planilla de datos</a></div>`;
   $('#gc').onclick = async () => { const o = {}; $$('[data-c]').forEach(e => o[e.dataset.c] = e.value); try { await API.call('docGuardarConfig', { config: o }); T.cfg = { ...T.cfg, ...o }; toast('Ajustes guardados ✅'); } catch (e) { manejar(e); } };

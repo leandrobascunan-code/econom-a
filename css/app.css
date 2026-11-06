@@ -201,3 +201,5 @@ table.t tr:hover td{background:rgba(47,127,224,.06)}
 .tile.ok{box-shadow:0 0 0 4px #fff,0 5px 0 rgba(0,0,0,.28)}
 .q-hint{text-align:center;font-size:.78rem;opacity:.8;margin-top:8px}
 .q-num{display:flex;gap:12px;justify-content:center;margin-top:12px;flex-wrap:wrap}.q-num label{margin:0;color:#fff;font-weight:700}.q-num input{width:120px;margin-top:4px;color:#14202e}
+.proj-x{position:fixed;top:12px;right:12px;z-index:120;border:0;border-radius:12px;padding:12px 18px;min-height:48px;font:700 1rem Inter,sans-serif;background:#fff;color:#0a2a66;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.previa-on .part{top:44px}

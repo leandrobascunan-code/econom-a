@@ -20,7 +20,7 @@ async function iniciar() {
   try { S.cfg = await API.call('config'); } catch (e) { App.innerHTML = `<div class="wrap"><div class="card err" style="margin-top:40px">${esc(e.message)}</div></div>`; return; }
   document.title = `${S.cfg.asignatura} · ${S.cfg.nombre_unidad}`;
   const tp = params.get('previa');
-  if (tp) { S.previa = true; API.token = tp; S.perfil = { rut: 'PREVIA', nombre: 'Vista previa', curso: 'Docente' }; return inicio(); }
+  if (tp) { S.previa = true; document.body.classList.add('previa-on'); API.token = tp; S.perfil = { rut: 'PREVIA', nombre: 'Vista previa', curso: 'Docente' }; return inicio(); }
   const t = store.get('tok'), p = store.get('perfil');
   if (t && p) { API.token = t; S.perfil = JSON.parse(p); return inicio(); }
   vistaAuth();
@@ -133,7 +133,7 @@ async function entrarPart() {
   const s = S.ses; const b = $('#ent'); b.disabled = true;
   try {
     const d = await API.call('entrar', { sesion: s.id });
-    try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { }
+    try { if (document.documentElement.requestFullscreen && !S.previa) await document.documentElement.requestFullscreen(); } catch (e) { }
     S.enPart = true; S.bloqueado = d.estado === 'bloqueado'; S.ritmoDoc = d.ritmo === 'docente'; setVivo(d);
     const primero = s.pasos.findIndex(p => esAct(p) && !s.respuestas[p.id]);
     S.idx = Math.max(0, Math.min(S.idx, s.pasos.length - 1));
@@ -163,9 +163,9 @@ function alPantalla() {
   document.body.appendChild(o);
   $('#fsb').onclick = async () => { try { await document.documentElement.requestFullscreen(); } catch (e) { } o.remove(); };
 }
-function antesDeCerrar(e) { if (S.enPart && !S.bloqueado && S.ses.bloqueo === 'SI') { e.preventDefault(); e.returnValue = ''; } }
+function antesDeCerrar(e) { if (S.enPart && !S.bloqueado && !S.previa && S.ses.bloqueo === 'SI') { e.preventDefault(); e.returnValue = ''; } }
 function marcarSalida(motivo) {
-  if (!S.enPart || S.bloqueado || S.ses.bloqueo !== 'SI') return;
+  if (!S.enPart || S.bloqueado || S.previa || S.ses.bloqueo !== 'SI') return;
   S.bloqueado = true; API.call('salir', { sesion: S.ses.id, motivo }, { keepalive: true }).catch(() => { });
 }
 function alVisibilidad() {
