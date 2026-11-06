@@ -362,3 +362,27 @@ table.t tr:hover td{background:rgba(47,127,224,.06)}
 .lay-video .st-vid .st-play{font-size:9cqw}
 .edslide:has(.lay-video) .fmtbar{display:none}
 @media (max-width:640px){.stage.lay-video{aspect-ratio:16/9}}
+/* ---- Resultados atractivos: respuesta correcta + barras con etiquetas ---- */
+.res-banner{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border-radius:18px;padding:14px 18px;box-shadow:0 8px 20px rgba(22,163,74,.35);margin-bottom:12px}
+.res-banner .rb-ic{font-size:2.2rem}.res-banner .rb-tx{flex:1;min-width:0}.res-banner .rb-t{font:700 .8rem Inter,sans-serif;text-transform:uppercase;letter-spacing:.08em;opacity:.9}
+.res-banner .rb-v{font:800 1.35rem/1.2 Poppins,sans-serif;overflow-wrap:anywhere}.res-banner .rb-pct{text-align:center;background:rgba(255,255,255,.2);border-radius:14px;padding:6px 12px}
+.res-banner .rb-pct b{display:block;font:800 1.7rem Poppins,sans-serif;line-height:1}.res-banner .rb-pct span{font-size:.75rem;opacity:.95}
+.res-expl{background:var(--warnbg);color:var(--warn);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:.95rem}
+.res-list{display:flex;flex-direction:column;gap:10px}
+.res-row{display:flex;gap:12px;align-items:center;background:var(--bg);border-radius:16px;padding:10px 12px;border:2px solid transparent}
+.res-row.ok{background:var(--okbg);border-color:var(--ok)}.res-row.no{opacity:.88}
+.res-ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;font:800 1.2rem Poppins,sans-serif;flex:none}
+.res-row.ok .res-ico{background:var(--ok)!important}
+.res-ico.t0,.res-bar i.t0{background:#e21b3c}.res-ico.t1,.res-bar i.t1{background:#1368ce}.res-ico.t2,.res-bar i.t2{background:#d89e00}.res-ico.t3,.res-bar i.t3{background:#26890c}
+.res-main{flex:1;min-width:0}.res-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.res-et{flex:1;min-width:120px;font-size:1.02rem;color:var(--ink)}.res-n{font:800 1rem Poppins,sans-serif;color:var(--ink)}
+.res-tag{background:var(--ok);color:#fff;border-radius:999px;padding:2px 10px;font-size:.75rem;font-weight:700;white-space:nowrap}
+.res-bar{height:16px;border-radius:99px;background:rgba(0,0,0,.08);overflow:hidden}.res-bar i{display:block;height:100%;border-radius:99px;transition:width .7s cubic-bezier(.2,.8,.2,1);min-width:4px}
+.res-row.ok .res-bar i{background:var(--ok)!important}
+/* proyección: texto legible sobre la tarjeta blanca y en grande */
+.proj .proj-card{color:var(--ink)}.proj .proj-card .small,.proj .proj-card .mut{color:var(--mut)}
+.proj .res-banner{padding:20px 26px}.proj .res-banner .rb-v{font-size:2.1rem}.proj .res-banner .rb-ic{font-size:3rem}.proj .res-banner .rb-pct b{font-size:2.6rem}
+.proj .res-et{font-size:1.55rem}.proj .res-n{font-size:1.5rem}.proj .res-ico{width:56px;height:56px;font-size:1.6rem}.proj .res-bar{height:22px}.proj .res-tag{font-size:.95rem}.proj .res-row{padding:14px 16px}.proj .res-expl{font-size:1.25rem}
+.vid-err{position:absolute;inset:0;z-index:6;background:rgba(10,20,45,.97);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:5%}
+.vid-err b{font:800 clamp(1rem,2.6cqw,1.6rem) Poppins,sans-serif}.vid-err p{margin:0;opacity:.92;font-size:clamp(.8rem,1.9cqw,1.15rem)}.vid-err small{opacity:.75;font-size:clamp(.7rem,1.5cqw,.95rem)}.vid-err .ve-ic{font-size:clamp(1.6rem,4cqw,2.6rem)}
+.doc{position:relative}

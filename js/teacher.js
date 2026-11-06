@@ -156,7 +156,7 @@ T.auto = (() => { try { return { lanzar: true, cerrar: true, ...JSON.parse(local
 const guardarAuto = () => { try { localStorage.setItem('auto', JSON.stringify(T.auto)); } catch (e) { } };
 function etiquetaAvanzar(c) {
   const v = c.v, p = c.paso, ult = c.paso && c.paso.idx >= c.n - 1;
-  if (v.ritmo !== 'docente') return '▶ Iniciar clase en vivo';
+  if (v.ritmo !== 'docente') return c.retomar && c.retomar.disponible ? '▶ Retomar (paso ' + (c.retomar.paso + 1) + ')' : '▶ Iniciar clase en vivo';
   if (!ESACT(p)) return ult ? '🏁 Fin de la clase' : 'Siguiente ▶';
   if (v.fase === 'espera') return '▶ Lanzar pregunta';
   if (v.fase === 'pregunta') return c.todos ? '📊 Ver resultados' : '⏹ Cerrar y ver resultados';
@@ -192,7 +192,11 @@ async function vCtrl() {
     else { n.textContent = v.dur + ' s'; n.classList.remove('urg'); if (b) b.style.width = '100%'; }
   }, 250);
 }
-async function autorizarCtrl(ruts) { try { const d = await API.call('docAutorizar', { sesion: T.sel, ruts }); toast(`✅ Autorizado${d.autorizados === 1 ? '' : 's'}: ${d.autorizados}`); await refrescarCtrl(true); } catch (e) { manejar(e); } }
+async function autorizarCtrl(ruts) {
+  ruts.forEach(r => { const b = $(`[data-au="${r}"]`); const fila = b && b.closest('.row'); if (fila) fila.remove(); });   // desaparece al instante, sin esperar al servidor
+  toast('✅ Autorizando…', 1400);
+  try { await API.call('docAutorizar', { sesion: T.sel, ruts }); T.sig = ''; await refrescarCtrl(true); } catch (e) { manejar(e); T.sig = ''; refrescarCtrl(true); }
+}
 /** Aviso solo en el Control del docente (nunca mientras se proyecta en este equipo). */
 function avisarSalidas(c) {
   const ahora = new Set((c.suspendidos || []).map(x => x.rut)); const pidieron = new Set((c.suspendidos || []).filter(x => x.pidio).map(x => x.rut));
@@ -222,6 +226,8 @@ async function refrescarCtrl(forzar, datos) {
   avisarSalidas(c);
   const susp = c.suspendidos || []; const hace = x => { const m = Math.max(0, Math.round((Date.now() + c.off - x.desde) / 60000)); return m < 1 ? 'hace un momento' : 'hace ' + m + ' min'; };
   let h = susp.length ? `<div class="card" style="border:2px solid var(--bad)"><div class="row"><b class="sp" style="color:var(--bad)">🔒 Salieron de la aplicación (${susp.length})</b>${susp.length > 1 ? '<button class="btn sm gold" id="au-all">Autorizar a todos</button>' : ''}</div>${susp.map(x => `<div class="row" style="margin-top:8px;gap:8px"><div class="sp"><b>${esc(x.nombre)}</b><div class="small mut">Salió ${hace(x)}</div></div>${x.pidio ? '<span class="chip warn">🙋 Pide autorización</span>' : ''}<button class="btn sm gold" data-au="${esc(x.rut)}">Autorizar</button></div>`).join('')}</div>` : '';
+  const rt = c.retomar; const haceMs = ms => { const m = Math.round(ms / 60000); return m < 1 ? 'hace un momento' : m < 60 ? 'hace ' + m + ' min' : m < 1440 ? 'hace ' + Math.round(m / 60) + ' h' : 'hace ' + Math.round(m / 1440) + ' día(s)'; };
+  if (rt && rt.disponible) h += `<div class="card" style="border:2px solid var(--gold)"><b>↩ Clase pausada</b><div class="small mut" style="margin:4px 0 10px">Quedaron en el paso <b>${rt.paso + 1} de ${rt.n}</b>${rt.titulo ? ': «' + esc(String(rt.titulo).slice(0, 60)) + '»' : ''}${rt.ult ? ' · ' + haceMs(Date.now() + c.off - rt.ult) : ''}.</div><div class="row" style="gap:8px"><button class="btn gold" id="ret">▶ Retomar donde quedamos</button><button class="btn sm ghost" id="ini0">Empezar desde el principio</button></div></div>`;
   h += `<div class="card"><div class="row"><span class="chip navy">${p ? p.idx + 1 : 0} / ${c.n}</span><span class="chip ${enVivo ? 'ok' : ''}">${enVivo ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes}</span>${enVivo ? `<span class="chip ${c.viendo >= c.presentes && c.presentes ? 'ok' : 'warn'}" title="Estudiantes que ya ven este mismo paso">👁 ${c.viendo}/${c.presentes}</span>` : ''}</div>`;
   if (p) {
     if (!act && p.tipo === 'diapositiva') h += `<div style="margin:12px auto 0;max-width:520px" class="mini">${slideStage(p, false)}</div>`;
@@ -244,17 +250,17 @@ async function refrescarCtrl(forzar, datos) {
   <div class="row" style="margin-top:10px"><select id="rj" style="flex:1">${c.pasos.map(q => `<option value="${q.i}" ${q.i === v.paso ? 'selected' : ''}>${q.i + 1}. ${esc((q.titulo || '').slice(0, 40))} · ${q.tipo}</option>`).join('')}</select><button class="btn sm ghost" id="rt">Ir</button></div>
   ${enVivo ? '<button class="btn sm ghost block" id="bfin" style="margin-top:10px">Terminar modo en vivo (ritmo libre)</button>' : '<div class="info">Ritmo libre: los estudiantes avanzan solos. Con la flecha ▶ inicias la clase en vivo.</div>'}</div><div class="remote-pad"></div>`;
   $('#cv').innerHTML = h;
-  $$('[data-au]').forEach(b => b.onclick = () => autorizarCtrl([b.dataset.au])); if ($('#au-all')) $('#au-all').onclick = () => autorizarCtrl(susp.map(x => x.rut));
+  $$('[data-au]').forEach(b => b.onclick = () => autorizarCtrl([b.dataset.au])); if ($('#au-all')) $('#au-all').onclick = () => autorizarCtrl(susp.map(x => x.rut)); if ($('#ret')) $('#ret').onclick = () => accionVivo({ op: 'retomar' }); if ($('#ini0')) $('#ini0').onclick = () => { if (confirm('¿Empezar la clase desde el principio? Se pierde el punto donde quedaron.')) accionVivo({ op: 'reiniciar' }); };
   const ev = (id, f) => { const e = $(id); if (e) e.onclick = f; };
   $$('[data-dt]').forEach(b => b.onclick = () => accionVivo({ op: 'tiempo', delta: +b.dataset.dt }));
   ev('#bres', () => accionVivo({ op: 'resultados' })); ev('#bana', () => { analizar('paso'); });
   ev('#bcer', () => accionVivo({ op: 'cerrar' })); ev('#bana2', () => { analizar('paso'); }); ev('#bana3', () => { analizar('sesion'); });
-  ev('#brk', () => accionVivo({ op: 'ranking' })); ev('#bcor', corregirAhora); ev('#rt', () => accionVivo({ op: 'ir', paso: +$('#rj').value })); ev('#bfin', () => accionVivo({ ritmo: 'libre' }));
+  ev('#brk', () => accionVivo({ op: 'ranking' })); ev('#bcor', corregirAhora); ev('#rt', () => accionVivo({ op: 'ir', paso: +$('#rj').value })); ev('#bfin', () => { accionVivo({ ritmo: 'libre' }); toast('Clase pausada: se libera a los estudiantes. Puedes retomarla en este mismo punto cuando quieras.', 6000); });
   if (key !== T.ckey || forzar) {
     T.ckey = key; if ($('#aires')) $('#aires').innerHTML = '';
     $('#rbar').innerHTML = `<div class="remote"><button class="btn ghost" id="rp" aria-label="Paso anterior">◀<small>Atrás</small></button><button class="btn ${v.fase === 'pregunta' && enVivo ? 'red' : 'gold'}" id="rm">${etiquetaAvanzar(c)}</button></div>`;
     $('#rp').onclick = () => accionVivo({ op: 'anterior' });
-    $('#rm').onclick = () => accionVivo(enVivo ? { op: 'avanzar' } : { ritmo: 'docente', op: 'ir', paso: v.paso });
+    $('#rm').onclick = () => accionVivo(enVivo ? { op: 'avanzar' } : (c.retomar && c.retomar.disponible ? { op: 'retomar' } : { ritmo: 'docente', op: 'ir', paso: v.paso }));
   }
 }
 /** Hoja inferior fija (misma pantalla, con desplazamiento propio): ya no hay que bajar a buscar el resultado. */
@@ -493,7 +499,7 @@ function modalVideo(ed, rerender) {
   const m0 = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Idea principal\n- Más información', layout: val('layout'), tema: val('tema') };
   const m = document.createElement('div'); m.className = 'modal';
   m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">🎬 Video de YouTube en la diapositiva</h3><button type="button" class="btn sm ghost" id="vx" aria-label="Cerrar">✕</button></div>
-  <label>Dirección del video (YouTube)</label><input id="v_url" placeholder="https://www.youtube.com/watch?v=…" value="${esc(val('video'))}">
+  <label>Dirección del video (YouTube)</label><input id="v_url" placeholder="https://www.youtube.com/watch?v=…" value="${esc(val('video'))}"><div id="v_estado" class="small" style="margin:6px 0;min-height:1.2em"></div>
   <div class="fxprev" id="v_prev"></div>
   <div class="grid2"><div><label>Audio</label><select id="v_aud">${Object.entries(VAUDIOS).map(([k, v]) => `<option value="${k}" ${(val('vaudio') || 'silencio') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div><div><label>Comenzar en el segundo</label><input id="v_ini" type="number" min="0" value="${esc(val('vini'))}" placeholder="0"></div></div>
   <label class="row" style="font-weight:500"><input type="checkbox" id="v_solo" ${val('layout') === 'video' ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Solo video, sin título ni texto (pantalla completa)</label>
@@ -505,7 +511,8 @@ function modalVideo(ed, rerender) {
   document.body.appendChild(m);
   const cerrar = () => { m.remove(); document.removeEventListener('keydown', escV); }; const escV = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', escV);
   const pint = () => { $('#v_prev', m).innerHTML = ytId($('#v_url', m).value) ? `<div class="mini">${slideStage({ ...m0, video: $('#v_url', m).value, layout: $('#v_solo', m) && $('#v_solo', m).checked ? 'video' : (['solo', 'titulo', 'destacado', 'cita', 'portada', 'video'].includes(m0.layout) ? 'imagen-derecha' : m0.layout) }, false)}</div>` : '<p class="small mut c">Pega un enlace de YouTube para ver la vista previa.</p>'; };
-  $('#v_url', m).oninput = pint; pint();
+  let tmV; const chequear = () => { clearTimeout(tmV); tmV = setTimeout(async () => { const st = $('#v_estado', m); if (!st) return; const id = ytId($('#v_url', m).value); if (!id) { st.textContent = ''; return; } st.textContent = 'Comprobando el video…'; try { const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + id)); if (r.ok) { const j = await r.json(); st.innerHTML = '✅ Se puede reproducir: <b>' + esc(j.title) + '</b> <span class="mut">(' + esc(j.author_name) + ')</span>'; } else if (r.status === 401 || r.status === 403) st.innerHTML = '<span style="color:var(--bad)">⛔ El autor no permite reproducir este video fuera de YouTube. Elige otro video.</span>'; else if (r.status === 404) st.innerHTML = '<span style="color:var(--bad)">⛔ El video no existe, es privado o fue eliminado.</span>'; else st.textContent = ''; } catch (e) { st.textContent = ''; } }, 450); };
+  $('#v_url', m).oninput = () => { pint(); chequear(); }; pint(); chequear();
   $('#vx', m).onclick = cerrar; $('#v_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
   const put = (k, v) => { const e = $(`[data-k="${k}"]`, ed); if (e) e.value = v; };
   $('#v_del', m).onclick = () => { put('video', ''); cerrar(); rerender(); };
@@ -788,6 +795,11 @@ function montarClaseIA(e, agregar, getCtx) {
   const box = $('#iaq'); if (!box) return;
   box.insertAdjacentHTML('beforeend', `<div class="card"><h3>🎨 Generar una clase completa</h3><p class="small mut">Crea una presentación atractiva (portada, viñetas, ideas destacadas e imágenes acordes) con actividades intercaladas, usando el tema, la sesión y el documento de arriba. Después puedes editar todo directamente sobre las diapositivas.</p>
   <div class="grid2"><div><label>Diapositivas</label><input id="ids" type="number" min="3" max="14" value="8"><div class="hint">Documento largo: usa 12 a 14 para cubrirlo completo.</div></div><div><label class="row" style="margin:20px 0 0;font-weight:500"><input type="checkbox" id="ida" checked style="width:20px;min-height:0;height:20px"> Intercalar actividades</label><label class="row" style="margin:6px 0 0;font-weight:500"><input type="checkbox" id="idi" checked style="width:20px;min-height:0;height:20px"> Buscar imágenes automáticamente</label></div></div>
+  <details style="margin-top:10px"><summary><b>🎛 Diseño de las diapositivas (opcional)</b> <span class="small mut">si eliges uno, se respeta en todas</span></summary><div class="grid2">
+  <div><label>Color</label><select id="id_tema"><option value="">Automático (la IA elige)</option>${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+  <div><label>Diseño</label><select id="id_lay"><option value="">Variado (la IA alterna)</option>${Object.entries(LAYOUTS).filter(([k]) => k !== 'video').map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+  <div><label>Efecto 3D</label><select id="id_fx"><option value="">Automático</option><option value="none">Ninguno</option>${Object.entries(FXS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+  <div><label>Movimiento de imágenes</label><select id="id_mov"><option value="">Automático (según cada imagen)</option><option value="none">Ninguno</option>${Object.entries(MOVS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div></div></details>
   <button class="btn gold block" id="idg" style="margin-top:12px">🎨 Generar clase</button><div id="idr"></div></div>`);
   $('#idg').onclick = async () => {
     const b = $('#idg'), out = $('#idr'); b.disabled = true; b.textContent = 'Diseñando la clase…'; out.innerHTML = '';
@@ -800,9 +812,9 @@ function montarClaseIA(e, agregar, getCtx) {
         await Promise.all([worker(), worker(), worker()]);
         const conImg = pasos.filter(p => p.tipo === 'diapositiva' && p.imagen); let j = 0, listas = 0; out.innerHTML = `<p><span class="spin"></span> Eligiendo el movimiento acorde a cada imagen… 0/${conImg.length}</p>`;
         const tarea2 = async () => { while (j < conImg.length) { const p = conImg[j++]; let r; try { r = await API.call('docAnalizarImagen', { url: p.imagen, titulo: p.titulo, texto: p.texto }); } catch (er) { r = sugerirPorTexto((p.imagen_q || '') + ' ' + p.titulo + ' ' + p.texto); } const pr = r.propuestas[0]; p.mov = pr.mov; p.movvel = pr.velocidad; p.movx = r.foco.x; p.movy = r.foco.y; listas++; out.innerHTML = `<p><span class="spin"></span> Eligiendo el movimiento acorde a cada imagen… ${listas}/${conImg.length}</p>`; } };
-        await Promise.all([tarea2(), tarea2(), tarea2()]);
+        if (!$('#id_mov').value) await Promise.all([tarea2(), tarea2(), tarea2()]);   // si elegiste un movimiento, se respeta y no se analiza
       }
-      let kfx = 0; pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; if (p.imagen && ['imagen-derecha', 'imagen-izquierda', 'dividido'].includes(p.layout)) { p.forma = 'tarjeta'; p.fx = ['inclinado', '', 'polaroid', 'flotante'][kfx++ % 4]; } else if (p.imagen && ['fondo', 'portada'].includes(p.layout) && !p.mov) p.fx = 'zoom'; });
+      let kfx = 0; const dg = { tema: $('#id_tema').value, lay: $('#id_lay').value, fx: $('#id_fx').value, mov: $('#id_mov').value }; pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (dg.tema) p.tema = dg.tema; if (dg.lay) p.layout = dg.lay; if (dg.mov) { p.mov = dg.mov === 'none' ? '' : dg.mov; delete p.movx; delete p.movy; } if (dg.fx) { p.fx = dg.fx === 'none' ? '' : dg.fx; return; } if (!dg.lay) { if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; } if (p.imagen && ['imagen-derecha', 'imagen-izquierda', 'dividido'].includes(p.layout)) { p.forma = 'tarjeta'; p.fx = ['inclinado', '', 'polaroid', 'flotante'][kfx++ % 4]; } else if (p.imagen && ['fondo', 'portada'].includes(p.layout) && !p.mov) p.fx = 'zoom'; });
       out.innerHTML = `<h3 style="margin-top:14px">Vista previa (${pasos.length} pasos)</h3>${avisoGen(d)}` + pasos.map((p, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="idsel" data-i="${i}" ${marcado(p)} style="width:20px;min-height:0;height:20px;vertical-align:middle"> <span class="chip ${p.tipo === 'diapositiva' ? 'navy' : 'warn'}">${ICONO[p.tipo] || ''} ${i + 1} · ${p.tipo === 'diapositiva' ? 'Diapositiva' : TIPOS[p.tipo] || p.tipo}</span> ${insignia(p)}${p.tipo === 'diapositiva' ? `<div class="mini" style="max-width:380px;margin-top:8px">${slideStage(p, false)}</div>` : `<div class="small" style="margin-top:6px"><b>${esc(p.pregunta)}</b></div>`}</label>`).join('') + '<button class="btn gold block" id="idadd">➕ Agregar la clase seleccionada</button>';
       $('#idadd').onclick = () => { const sel = $$('.idsel').filter(x => x.checked).map(x => pasos[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos un paso.'); agregar(sel.map(limpiarGen)); };
     } catch (er) { out.innerHTML = `<div class="err">${esc(er.message)}</div>`; if (er.code === 'SESION_EXPIRADA') manejar(er); }

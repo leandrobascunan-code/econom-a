@@ -64,7 +64,7 @@ function ytEmbed(url) {
 function embedInfo(m) {
   if (m.driveId) { const mi = m.mime || ''; return { src: 'https://drive.google.com/file/d/' + m.driveId + '/preview', video: mi.startsWith('video/') }; }
   const u = String(m.url || ''); let x;
-  if ((x = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/.exec(u))) return { src: 'https://www.youtube-nocookie.com/embed/' + x[1], video: true };
+  if ((x = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/.exec(u))) return { src: 'https://www.youtube-nocookie.com/embed/' + x[1] + '?enablejsapi=1&rel=0&playsinline=1', video: true };
   if ((x = /drive\.google\.com\/file\/d\/([\w-]+)/.exec(u))) return { src: 'https://drive.google.com/file/d/' + x[1] + '/preview' };
   if ((x = /docs\.google\.com\/(presentation|document|spreadsheets)\/d\/([\w-]+)/.exec(u))) return { src: 'https://docs.google.com/' + x[1] + '/d/' + x[2] + (x[1] === 'presentation' ? '/embed?start=false&loop=false' : '/preview') };
   if (/^https:\/\/(www\.)?canva\.com\/design\//.test(u)) return { src: u.split('?')[0].replace(/\/(edit|watch)$/, '/view') + '?embed' };
@@ -73,7 +73,7 @@ function embedInfo(m) {
 }
 function bloqueEmbed(m) {
   const e = embedInfo(m); if (!e) return '';
-  return `<div class="doc ${e.video ? 'v' : ''}"><iframe src="${esc(e.src)}" allow="fullscreen; autoplay; encrypted-media" allowfullscreen loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
+  return `<div class="doc ${e.video ? 'v' : ''}"><iframe src="${esc(e.src)}" allow="fullscreen; autoplay; encrypted-media" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
 }
 function urlAbrir(m) { return m.driveId ? 'https://drive.google.com/file/d/' + m.driveId + '/view' : (m.url || ''); }
 /* ---- Diapositivas visuales (estilo presentación) ---- */
@@ -158,7 +158,7 @@ function ytId(u) { const m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shor
 function ytUrl(p, proj) {
   const id = ytId(p.video); if (!id) return '';
   const silencio = p.vaudio === 'audio' ? false : p.vaudio === 'proy' ? !proj : true;
-  const q = new URLSearchParams({ mute: silencio ? 1 : 0, autoplay: (proj || p.vauto) ? 1 : 0, controls: p.vctrl === 'no' ? 0 : 1, rel: 0, modestbranding: 1, playsinline: 1 });
+  const q = new URLSearchParams({ mute: silencio ? 1 : 0, autoplay: (proj || p.vauto) ? 1 : 0, controls: p.vctrl === 'no' ? 0 : 1, rel: 0, modestbranding: 1, playsinline: 1, enablejsapi: 1 });
   if (p.vloop) { q.set('loop', 1); q.set('playlist', id); }
   const ini = Number(p.vini) || 0; if (ini > 0) q.set('start', ini);
   return 'https://www.youtube-nocookie.com/embed/' + id + '?' + q.toString();
@@ -199,7 +199,26 @@ function sugerirPorTexto(txt) {
   if (!r) return { tipo: 'imagen', descripcion: 'No se pudo reconocer el contenido; se propone un movimiento suave general.', foco: { x: 50, y: 50 }, personas: false, sinVision: true, propuestas: [mk('zoom-foco', 'lento', 'Acercamiento suave al centro.'), mk('paneo-der', 'lento', 'Recorrido lateral lento.'), mk('respirar', 'lento', 'Zoom que respira.')] };
   const por = { navegar: 'La imagen se mece como sobre las olas.', vaiven: 'Vaivén de oleaje.', 'paneo-der': 'Recorrido lateral lento.', 'zoom-foco': 'Acercamiento lento al punto de interés.', respirar: 'Zoom suave que respira.', 'paneo-izq': 'Recorrido lateral lento.', 'tilt-arriba': 'Sube mostrando la altura.', travelling: 'Barrido rápido que da sensación de avance.', 'tilt-abajo': 'Baja recorriendo la escena.', brillo: 'Destello de luz que da valor.', viento: 'Balanceo como el viento.', flotar: 'Flota suavemente.', diagonal: 'Recorrido diagonal.' };
   return { tipo: r[1], descripcion: 'Según el texto, la imagen probablemente muestra ' + r[1] + '.', foco: { x: r[6], y: r[7] }, personas: r[1] === 'personas', sinVision: true, propuestas: [mk(r[2], r[3], por[r[2]]), mk(r[4], 'lento', por[r[4]]), mk(r[5], 'lento', por[r[5]])] };
-}/** Reduce el tamaño del texto de cada diapositiva hasta que quepa completo (nada se corta, ni arriba ni abajo). */
+}/* ---- Videos que no se pueden reproducir: detectar el motivo y ofrecer una salida ---- */
+const ERR_YT = { 2: 'El enlace del video no es válido.', 5: 'El navegador no pudo reproducir este video.', 100: 'El video fue eliminado o es privado.', 101: 'El autor no permite reproducir este video fuera de YouTube.', 150: 'El autor no permite reproducir este video fuera de YouTube.', 153: 'YouTube no pudo cargar el reproductor.' };
+function vigilarVideos() {
+  document.querySelectorAll('.st-vid iframe:not([data-vig]), .doc.v iframe:not([data-vig])').forEach(f => {
+    f.dataset.vig = '1'; if (!/youtube/.test(f.src)) return;
+    const hs = () => { try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch (e) { } };
+    f.addEventListener('load', () => { hs(); setTimeout(hs, 700); setTimeout(hs, 2200); });
+  });
+}
+window.addEventListener('message', ev => {
+  if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(ev.origin)) return;
+  let d; try { d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data; } catch (e) { return; }
+  if (!d || d.event !== 'onError') return;
+  const f = [...document.querySelectorAll('iframe')].find(x => x.contentWindow === ev.source); if (!f) return;
+  const code = Number(d.info);
+  if (code === 153 && !f.dataset.fb) { f.dataset.fb = '1'; f.src = f.src.replace('youtube-nocookie.com', 'youtube.com'); return; }   // reintento con el dominio normal
+  const box = f.closest('.st-vid, .doc'); if (!box || box.querySelector('.vid-err')) return;
+  const id = (/embed\/([\w-]{11})/.exec(f.src) || [])[1] || '';
+  box.insertAdjacentHTML('beforeend', `<div class="vid-err"><div class="ve-ic">⚠️</div><b>Este video no se puede reproducir aquí</b><p>${esc(ERR_YT[code] || 'YouTube no permitió reproducirlo.')}</p>${id ? `<a class="btn gold" href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener">▶ Abrir en YouTube</a>` : ''}<small>Sugerencia: elige otro video, o súbelo a tu Drive para incrustarlo.</small></div>`);
+});/** Reduce el tamaño del texto de cada diapositiva hasta que quepa completo (nada se corta, ni arriba ni abajo). */
 function ajustarDiapos(root) {
   (root || document).querySelectorAll('.stage').forEach(st => {
     const box = st.querySelector('.st-txt'); if (!box || !st.clientWidth) return;
@@ -208,7 +227,7 @@ function ajustarDiapos(root) {
   });
 }
 (function () {
-  let t; const pedir = () => { clearTimeout(t); t = setTimeout(() => ajustarDiapos(), 40); };
+  let t; const pedir = () => { clearTimeout(t); t = setTimeout(() => { ajustarDiapos(); vigilarVideos(); }, 40); };
   const ini = () => { new MutationObserver(pedir).observe(document.body, { childList: true, subtree: true }); window.addEventListener('resize', pedir); document.addEventListener('input', e => { if (e.target.closest && e.target.closest('.stage')) pedir(); }); if (document.fonts && document.fonts.ready) document.fonts.ready.then(pedir); pedir(); };
   if (document.body) ini(); else document.addEventListener('DOMContentLoaded', ini);
 })();/** Busca imágenes libres en internet (Wikimedia Commons y Openverse). Devuelve [{src, thumb, credito}] */
@@ -225,7 +244,19 @@ async function buscarImagenes(q) {
 const FORMAS = ['▲', '◆', '●', '■'];
 function barras(etqs, cuentas, correcta) {
   const t = cuentas.reduce((a, b) => a + b, 0) || 1; const max = Math.max(...cuentas, 1);
-  return etqs.map((e, i) => `<div class="bar-row"><div class="row small"><span class="sp">${esc(e)} ${correcta === i ? '✅' : ''}</span><b>${cuentas[i]} · ${Math.round(cuentas[i] / t * 100)}%</b></div><div class="bar big t${i % 4}"><i style="width:${cuentas[i] / max * 100}%"></i></div></div>`).join('');
+  return '<div class="res-list">' + etqs.map((e, i) => {
+    const ok = correcta === i; const pc = Math.round((cuentas[i] || 0) / t * 100);
+    return `<div class="res-row ${ok ? 'ok' : ''} ${correcta >= 0 && !ok ? 'no' : ''}"><div class="res-ico t${i % 4}">${ok ? '✓' : FORMAS[i % 4]}</div><div class="res-main"><div class="res-top"><b class="res-et">${esc(e)}</b>${ok ? '<span class="res-tag">✔ Respuesta correcta</span>' : ''}<span class="res-n">${cuentas[i] || 0} · ${pc}%</span></div><div class="res-bar"><i class="t${i % 4}" style="width:${(cuentas[i] || 0) / max * 100}%"></i></div></div></div>`;
+  }).join('') + '</div>';
+}
+/** Tarjeta destacada con la respuesta correcta, el % de acierto y la explicación. */
+function bannerCorrecta(p, a, correcta) {
+  let txt = '';
+  if (p.tipo === 'opcion' && (p.opciones || [])[correcta] !== undefined) txt = 'ABCDEFGH'[correcta] + ') ' + p.opciones[correcta];
+  else if (p.tipo === 'vf' && (correcta === 'V' || correcta === 'F')) txt = correcta === 'V' ? 'Verdadero' : 'Falso';
+  else if (p.tipo === 'numerica' && correcta !== undefined && correcta !== null) txt = String(correcta);
+  if (!txt) return '';
+  return `<div class="res-banner"><div class="rb-ic">✅</div><div class="rb-tx"><div class="rb-t">Respuesta correcta</div><div class="rb-v">${esc(txt)}</div></div><div class="rb-pct"><b>${a && a.pctOk !== undefined ? a.pctOk : 0}%</b><span>acertó</span></div></div>${p.explicacion ? `<div class="res-expl">💡 ${esc(p.explicacion)}</div>` : ''}`;
 }
 function nubeHtml(palabras) {
   if (!palabras || !palabras.length) return '<p class="mut c">Aún no hay palabras.</p>';
@@ -236,11 +267,11 @@ function nubeHtml(palabras) {
 function aggHtml(p, a, correcta) {
   if (!a) return '';
   const h = `<p class="small mut c">${a.n} respuesta${a.n === 1 ? '' : 's'}</p>`;
-  if (p.tipo === 'opcion' || p.tipo === 'encuesta') return h + barras((p.opciones || []).map((o, i) => 'ABCDEFGH'[i] + '. ' + o), a.cuentas || [], p.tipo === 'opcion' ? correcta : -1);
-  if (p.tipo === 'vf') return h + barras(['Verdadero', 'Falso'], a.cuentas || [0, 0], correcta === 'V' ? 0 : correcta === 'F' ? 1 : -1);
+  if (p.tipo === 'opcion' || p.tipo === 'encuesta') return (p.tipo === 'opcion' ? bannerCorrecta(p, a, correcta) : '') + h + barras((p.opciones || []).map((o, i) => 'ABCDEFGH'[i] + '. ' + o), a.cuentas || [], p.tipo === 'opcion' ? correcta : -1);
+  if (p.tipo === 'vf') return bannerCorrecta(p, a, correcta) + h + barras(['Verdadero', 'Falso'], a.cuentas || [0, 0], correcta === 'V' ? 0 : correcta === 'F' ? 1 : -1);
   if (p.tipo === 'escala') return h + barras(['1 · Muy en desacuerdo', '2', '3', '4', '5 · Muy de acuerdo'], a.cuentas || [0, 0, 0, 0, 0], -1) + `<p class="c"><b>Promedio: ${a.media}</b></p>`;
   if (p.tipo === 'nube') return h + nubeHtml(a.palabras);
-  if (p.tipo === 'numerica') return h + `<p class="c">${a.pctOk}% acertó</p>` + (a.valores || []).map(v => `<div class="row small"><span class="sp">${esc(v.v)}</span><b>${v.n}</b></div>`).join('');
+  if (p.tipo === 'numerica') { const vs = a.valores || []; return bannerCorrecta(p, a, correcta) + h + (vs.length ? barras(vs.map(v => 'Respondieron: ' + v.v), vs.map(v => v.n), vs.findIndex(v => Number(v.v) === Number(correcta))) : ''); }
   return h;
 }
 function podioHtml(top, miAlias) {

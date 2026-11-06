@@ -127,7 +127,7 @@ function pintarSesion(tab) {
 }
 
 /* ---------- Modo participación ---------- */
-function setVivo(d) { S.vivo = { paso: d.paso ?? d.paso_actual ?? 0, fase: d.fase || 'diapositiva', t: d.t || 0, dur: d.dur || 20, retro: d.retro || '', off: (d.ahora || Date.now()) - Date.now() }; }
+function setVivo(d) { S.vivo = { paso: d.paso ?? d.paso_actual ?? 0, fase: d.fase || 'diapositiva', t: d.t || 0, dur: d.dur || 20, retro: d.retro || '', off: (d.ahora || Date.now()) - Date.now(), fin: !!d.fin }; }
 const claveVivo = v => v.paso + '|' + v.fase + '|' + v.retro;
 async function entrarPart() {
   const s = S.ses; const b = $('#ent'); b.disabled = true;
@@ -163,9 +163,9 @@ function alPantalla() {
   document.body.appendChild(o);
   $('#fsb').onclick = async () => { try { await document.documentElement.requestFullscreen(); } catch (e) { } o.remove(); };
 }
-function antesDeCerrar(e) { if (S.enPart && !S.bloqueado && !S.previa && S.ses.bloqueo === 'SI') { e.preventDefault(); e.returnValue = ''; } }
+function antesDeCerrar(e) { if (S.enPart && !S.bloqueado && !S.previa && S.ses.bloqueo === 'SI' && !(S.vivo && S.vivo.fin)) { e.preventDefault(); e.returnValue = ''; } }
 function marcarSalida(motivo) {
-  if (!S.enPart || S.bloqueado || S.previa || S.ses.bloqueo !== 'SI') return;
+  if (!S.enPart || S.bloqueado || S.previa || S.ses.bloqueo !== 'SI' || (S.vivo && S.vivo.fin)) return;
   S.bloqueado = true; API.call('salir', { sesion: S.ses.id, motivo }, { keepalive: true }).catch(() => { });
 }
 function alVisibilidad() {
@@ -177,6 +177,7 @@ async function latir() {
   if (!S.enPart || S.bloqueado || document.hidden) return;
   try {
     const d = await API.call('latido', { sesion: S.ses.id, vista: S.ritmoDoc && S.vivo ? S.vivo.paso : S.idx });
+    if (d.cerrada) { toast('El plazo de la sesión terminó.'); return finalizarPart(); }   // cerrada: nunca se pide autorización
     if (d.estado === 'bloqueado') { S.bloqueado = true; return pintarBloqueo(); }
     if (d.cerrada) { toast('El plazo de la sesión terminó.'); return finalizarPart(); }
     const antes = S.vivo ? claveVivo(S.vivo) : ''; const era = S.ritmoDoc; S.ritmoDoc = d.ritmo === 'docente'; setVivo(d);
@@ -198,7 +199,7 @@ function pintarBloqueo() {
       if (d.cerrada) { ov.remove(); clearInterval(S.poll); toast('El plazo terminó.'); return finalizarPart(); }
       if (d.estado === 'activo') { clearInterval(S.poll); S.bloqueado = false; ov.remove(); setVivo(d); S.ritmoDoc = d.ritmo === 'docente'; toast('✅ El docente te autorizó. ¡Sigue participando!'); try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => { }); } catch (e) { } pintarPaso(); }
     } catch (e) { manejar(e); }
-  }, 4000);
+  }, 1500);
 }
 async function finalizarPart() { detenerPart(); const o = $('.lock'); if (o) o.remove(); await verSesion(S.ses.id); }
 async function terminarPart() {
