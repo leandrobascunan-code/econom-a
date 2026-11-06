@@ -76,12 +76,12 @@ async function inicio() {
   $('#inf').onclick = async ev => { ev.target.disabled = true; try { const d = await API.call('miInforme'); descargarBase64(d.nombre, d.base64); } catch (e) { toast(e.message, 4500); } ev.target.disabled = false; };
   if (sesionQR && S.sesiones.some(s => s.id === sesionQR)) { const q = sesionQR; history.replaceState(null, '', location.pathname); verSesion(q); }
 }
-function chipEstado(e) { return { abierta: '<span class="chip ok">Abierta</span>', cerrada: '<span class="chip bad">Plazo cerrado</span>', proximamente: '<span class="chip warn">Próximamente</span>' }[e] || ''; }
+function chipEstado(e, vivo) { if (vivo) return '<span class="chip bad">🔴 En vivo</span>'; return { abierta: '<span class="chip ok">Abierta</span>', cerrada: '<span class="chip bad">Plazo cerrado</span>', proximamente: '<span class="chip warn">Próximamente</span>' }[e] || ''; }
 function tarjetaSesion(s) {
   return `<button class="card ses ${s.estado} row" data-id="${esc(s.id)}" style="gap:14px"><div class="n">${s.numero}</div><div class="sp"><div class="row" style="gap:8px"><b>${esc(s.titulo)}</b></div>
   <div class="small mut">${s.estado === 'abierta' ? 'Cierra: ' + fmtFecha(s.cierre) : s.estado === 'cerrada' ? 'Cerró: ' + fmtFecha(s.cierre) : 'Abre: ' + fmtFecha(s.apertura)}</div>
   <div class="bar" style="margin:8px 0 4px"><i style="width:${s.actividades ? Math.round(s.respondidas / s.actividades * 100) : 0}%"></i></div>
-  <div class="small mut">${s.respondidas}/${s.actividades} actividades${s.pendientes ? ' · ' + s.pendientes + ' en revisión' : ''}${s.nota !== null ? ' · Nota ' + String(s.nota).replace('.', ',') : ''}</div></div>${chipEstado(s.estado)}</button>`;
+  <div class="small mut">${s.respondidas}/${s.actividades} actividades${s.pendientes ? ' · ' + s.pendientes + ' en revisión' : ''}${s.nota !== null ? ' · Nota ' + String(s.nota).replace('.', ',') : ''}</div></div>${chipEstado(s.estado, s.enVivo)}</button>`;
 }
 
 /* ---------- Sesión: material + participar ---------- */
@@ -115,7 +115,8 @@ function pintarSesion(tab) {
       <div class="bar" style="margin:12px 0 4px"><i style="width:${acts.length ? hechas / acts.length * 100 : 0}%"></i></div><div class="small mut">${hechas} de ${acts.length} actividades respondidas</div></div>
       ${ab ? `${s.bloqueo === 'SI' ? `<div class="info">🔒 <b>Modo concentración:</b> mientras participas no puedes abrir otra app ni otra página. Si sales, tu participación se detiene y solo el docente puede autorizarte a volver.</div>` : ''}
         ${s.miEstado === 'bloqueado' ? '<div class="info">Tu participación fue suspendida. Entra y espera la autorización del docente.</div>' : ''}
-        <button class="btn block" id="ent">${hechas ? 'Continuar participando' : 'Entrar a participar'} →</button>`
+        ${s.ritmo === 'docente' ? '<div class="info" style="background:var(--badbg);color:var(--bad)">🔴 <b>Clase en vivo:</b> tu docente guía la presentación y las actividades. Entra y sigue su ritmo.</div>' : ''}
+        <button class="btn block" id="ent">${s.ritmo === 'docente' ? '🔴 Entrar a la clase en vivo' : hechas ? 'Continuar participando' : 'Entrar a participar'} →</button>`
         : `<div class="info">${s.estado === 'cerrada' ? 'El plazo terminó: ya no puedes responder actividades, pero puedes revisar el material y tus resultados.' : 'Esta sesión aún no se abre.'}</div>`}`;
   }
   App.innerHTML = `${banner()}<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="sp"><div class="brand">Colegio Marina de Chile<small>Clases de Economía</small></div></div><button class="btn sm ghost" id="back" style="color:#fff;border-color:rgba(255,255,255,.4)">← Volver</button></div><h1>Sesión ${s.numero}</h1><p>${esc(s.titulo)}</p></div></div>

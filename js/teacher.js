@@ -337,39 +337,50 @@ function editor() {
   <div class="grid2"><div><label>Abre (plazo)</label><input id="ap" type="datetime-local" value="${aInputLocal(e.apertura)}"></div><div><label>Cierra (plazo límite para actividades)</label><input id="ci" type="datetime-local" value="${aInputLocal(e.cierre)}"></div></div>
   <label>Modo concentración (bloqueo al salir de la app)</label><select id="bl"><option value="SI" ${e.bloqueo !== 'NO' ? 'selected' : ''}>Activado</option><option value="NO" ${e.bloqueo === 'NO' ? 'selected' : ''}>Desactivado</option></select>
   ${campo('pauta_ia', 'Notas para la IA (errores frecuentes, criterios)', e.pauta_ia, 'area')}</div>
-  <div class="card"><h3>⬆ Subir archivos completos</h3><p class="small mut">Arrastra o elige PDF, PowerPoint, Word, imágenes o videos. Se guardan en tu Drive y quedan dentro de esta sesión; no necesitas copiar nada. Máx. 300 MB por archivo.</p>
-  <div class="grid2"><div><div class="drop" data-dest="paso">📽️ <b>A la presentación</b><div class="small mut">Se verán como diapositivas dentro de la clase</div></div></div><div><div class="drop" data-dest="mat">📚 <b>Al material y videos</b><div class="small mut">Los estudiantes lo ven cuando quieran</div></div></div></div>
+  <div class="card"><h3 style="margin:0 0 4px">🎬 La clase: presentación con actividades</h3>
+  <p class="small mut">Todo en una sola secuencia, en el orden en que se verá: diapositivas, archivos, videos y actividades (estilo Kahoot/Menti). En modo en vivo tú avanzas paso a paso desde el celular.</p>
+  <div class="outline row" style="gap:6px">${e.pasos.map((p, i) => `<a href="#" class="chip ${ESACT(p) ? 'warn' : 'navy'}" data-go="${i}" title="${esc(p.titulo || p.pregunta || '')}">${i + 1} ${ICONO[p.tipo] || '•'}</a>`).join('') || '<span class="mut small">Aún no hay pasos.</span>'}</div>
+  <div class="row" style="margin-top:12px"><label style="margin:0">Insertar nuevos pasos:</label><select id="pos" style="max-width:330px"><option value="">al final</option>${e.pasos.map((p, i) => `<option value="${i}" ${T.pos === i ? 'selected' : ''}>después del paso ${i + 1} · ${esc((p.titulo || p.pregunta || p.tipo).slice(0, 30))}</option>`).join('')}</select>
+  <select id="addtipo" style="max-width:260px"><option value="">＋ Agregar paso…</option>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}">${ICONO[k] || ''} ${v}</option>`).join('')}</select></div></div>
+  <div id="pasos">${e.pasos.map(pasoForm).join('')}</div>
+  <div class="card"><h3>⬆ Subir archivos completos</h3><p class="small mut">Arrastra o elige PDF, PowerPoint, Word, imágenes o videos. Se guardan en tu Drive y quedan dentro de esta sesión; no necesitas copiar nada. Máx. 300 MB por archivo. Se insertan donde indica «Insertar nuevos pasos».</p>
+  <div class="grid2"><div class="drop" data-dest="paso">📽️ <b>Como un paso de la clase</b><div class="small mut">PDF, PowerPoint, imagen, video…</div></div><div class="drop" data-dest="split">✂️ <b>PDF → una diapositiva por página</b><div class="small mut">Así puedes meter actividades entre medio</div></div></div>
+  <div class="drop" data-dest="mat" style="margin-top:10px">📚 <b>Al material y videos</b> <span class="small mut">(los estudiantes lo ven cuando quieran)</span></div>
   <input type="file" id="fi" multiple hidden accept=".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.m4v,.mp3"><div id="upm"></div>
-  <div class="hint">Canva: en Canva usa Compartir → «Ver» → copia el enlace y pégalo en un paso «Archivo / Canva / video incrustado» (botón «＋ Archivo o enlace»).</div></div>
+  <div class="hint">PowerPoint: para dividirlo por diapositivas, expórtalo a PDF (Archivo → Exportar → PDF) y usa «PDF → una diapositiva por página». Canva: Compartir → «Ver» → copia el enlace y pégalo en un paso «Archivo / Canva / video incrustado».</div></div>
   <div id="iaq"></div>
-  <h3>Material y videos <button class="btn sm ghost" id="am">＋</button></h3><div id="mats">${e.material.map(matForm).join('')}</div>
-  <h3 style="margin-top:18px">Presentación y actividades <span class="mut small">(diapositivas, preguntas)</span></h3><div id="pasos">${e.pasos.map(pasoForm).join('')}</div>
-  <div class="row"><button class="btn sm" id="ap_">＋ Diapositiva</button><button class="btn sm" id="ad">＋ Archivo o enlace</button><button class="btn sm" id="aq">＋ Actividad</button></div>`;
+  <h3>Material y videos <button class="btn sm ghost" id="am">＋</button></h3><div id="mats">${e.material.map(matForm).join('')}</div>`;
   const rep = () => { e.titulo = $('[data-k="titulo"]').value; };
   const refrescar = () => { e.pasos = leerPasos(); e.material = leerMat(); const sc = scrollY; editor(); scrollTo(0, sc); };
   $('#bk').onclick = () => { T.edit = null; vSes(); };
   $('#am').onclick = () => { e.pasos = leerPasos(); e.material = [...leerMat(), { tipo: 'video', titulo: '', url: '', descripcion: '' }]; copiarCab(); editor(); };
-  $('#ap_').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'diapositiva', titulo: '', texto: '' }]; e.material = leerMat(); copiarCab(); editor(); };
-  montarIA(e, nuevos => { e.pasos = [...leerPasos(), ...nuevos]; e.material = leerMat(); copiarCab(); editor(); toast(`${nuevos.length} actividad(es) agregadas. Recuerda pulsar «Guardar».`, 5000); });
-  $('#ad').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'documento', titulo: '', url: '' }]; e.material = leerMat(); copiarCab(); editor(); };
+  const posIns = () => { const v = $('#pos').value; return v === '' ? e.pasos.length : +v + 1; };
+  const insertar = (nuevos, mats = []) => { const i = posIns(); const ps = leerPasos(); ps.splice(Math.min(i, ps.length), 0, ...nuevos); e.pasos = ps; e.material = [...leerMat(), ...mats]; copiarCab(); T.pos = i + nuevos.length - 1; editor(); };
+  $('#addtipo').onchange = ev => { const t = ev.target.value; if (t) insertar([nuevoPaso(t)]); };
+  $$('[data-go]').forEach(a => a.onclick = ev => { ev.preventDefault(); const el = $$('#pasos .paso-ed')[+a.dataset.go]; if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  montarIA(e, nuevos => { insertar(nuevos); toast(`${nuevos.length} actividad(es) agregadas. Recuerda pulsar «Guardar».`, 5000); });
   let destino = 'paso';
   $$('.drop').forEach(d => { d.onclick = () => { destino = d.dataset.dest; $('#fi').click(); }; d.ondragover = ev => { ev.preventDefault(); d.classList.add('on'); }; d.ondragleave = () => d.classList.remove('on'); d.ondrop = ev => { ev.preventDefault(); d.classList.remove('on'); destino = d.dataset.dest; subir([...ev.dataTransfer.files]); }; });
   $('#fi').onchange = ev => { subir([...ev.target.files]); ev.target.value = ''; };
   async function subir(files) {
-    const box = $('#upm'); const nuevosP = [], nuevosM = [];
+    const box = $('#upm'); const nuevosP = [], nuevosM = []; const modo = destino;
     for (const f of files) {
+      if (modo === 'split') {
+        if (!/\.pdf$/i.test(f.name)) { box.insertAdjacentHTML('beforeend', `<div class="err">${esc(f.name)}: para dividir debe ser PDF.</div>`); continue; }
+        try { nuevosP.push(...await dividirPDF(f, box)); } catch (er) { box.insertAdjacentHTML('beforeend', `<div class="err">${esc(f.name)}: ${esc(er.message)}</div>`); if (er.code === 'SESION_EXPIRADA') return manejar(er); }
+        continue;
+      }
       const row = document.createElement('div'); row.className = 'upl'; row.innerHTML = `<span>${esc(f.name)}</span><div class="bar"><i style="width:0"></i></div><b>0%</b>`; box.appendChild(row);
       try {
         const r = await subirArchivo(f, p => { $('i', row).style.width = p * 100 + '%'; $('b', row).textContent = Math.round(p * 100) + '%'; });
         const nombre = f.name.replace(/\.[^.]+$/, ''); $('b', row).textContent = '✅';
-        if (destino === 'paso') nuevosP.push({ id: 'd' + Date.now().toString(36) + nuevosP.length, tipo: 'documento', titulo: nombre, driveId: r.id, mime: r.mime });
+        if (modo === 'paso') nuevosP.push({ id: 'd' + Date.now().toString(36) + nuevosP.length, tipo: 'documento', titulo: nombre, driveId: r.id, mime: r.mime });
         else nuevosM.push({ tipo: (r.mime || '').startsWith('video/') ? 'video' : 'documento', titulo: nombre, driveId: r.id, mime: r.mime, url: '', descripcion: '' });
       } catch (er) { row.innerHTML = `<span class="err" style="margin:0">${esc(f.name)}: ${esc(er.message)}</span>`; if (er.code === 'SESION_EXPIRADA') return manejar(er); }
     }
     if (!nuevosP.length && !nuevosM.length) return;
-    e.pasos = [...leerPasos(), ...nuevosP]; e.material = [...leerMat(), ...nuevosM]; copiarCab(); editor(); toast('Archivos agregados. Recuerda pulsar «Guardar».', 5000);
+    insertar(nuevosP, nuevosM); toast('Archivos agregados a la clase. Recuerda pulsar «Guardar».', 5000);
   }
-  $('#aq').onclick = () => { e.pasos = [...leerPasos(), { tipo: 'opcion', pregunta: '', opciones: ['', '', '', ''], correcta: 0, puntos: 1 }]; e.material = leerMat(); copiarCab(); editor(); };
   function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
   $('#pasos').onchange = ev => { if (ev.target.dataset.k === 'tipo') { const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); ps[i] = { id: ps[i].id, tipo: ps[i].tipo, titulo: ps[i].titulo, texto: ps[i].texto, pregunta: ps[i].pregunta, puntos: ps[i].puntos || 1, opciones: ['', '', '', ''], correcta: ps[i].tipo === 'vf' ? 'V' : 0, campos: ['Tu respuesta'] }; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); } };
   $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
@@ -379,6 +390,32 @@ function editor() {
     const b = $('#sv'); b.disabled = true;
     try { const { id } = await API.call('docGuardarSesion', { sesion: e }); T.sesiones = (await API.call('docSesiones')).sesiones; T.sel = T.sel || id; T.edit = null; toast('Sesión guardada ✅'); vSes(); } catch (er) { manejar(er); b.disabled = false; }
   };
+}
+const ICONO = { diapositiva: '🖼', documento: '📎', opcion: '🔺', vf: '✔', numerica: '🔢', encuesta: '📊', nube: '☁', escala: '⭐', abierta: '✍' };
+function nuevoPaso(t) {
+  const id = 'n' + Math.random().toString(36).slice(2, 7);
+  return ({
+    diapositiva: { id, tipo: t, titulo: '', texto: '' }, documento: { id, tipo: t, titulo: '', url: '' },
+    opcion: { id, tipo: t, pregunta: '', opciones: ['', '', '', ''], correcta: 0, puntos: 1 }, vf: { id, tipo: t, pregunta: '', correcta: 'V', puntos: 1 },
+    numerica: { id, tipo: t, pregunta: '', correcta: 0, tolerancia: 0.01, puntos: 2 }, encuesta: { id, tipo: t, pregunta: '', opciones: ['', '', ''], puntos: 1 },
+    nube: { id, tipo: t, pregunta: '', puntos: 1 }, escala: { id, tipo: t, pregunta: '', puntos: 1 }, abierta: { id, tipo: t, pregunta: '', campos: ['Tu respuesta'], puntos: 3 }
+  })[t];
+}
+/** Divide un PDF en páginas sueltas (un archivo por página) para usarlas como diapositivas y poder intercalar actividades. */
+async function dividirPDF(file, box) {
+  await cargarLib('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
+  const src = await PDFLib.PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true }); const n = src.getPageCount();
+  if (n > 80) throw new Error('El PDF tiene más de 80 páginas. Divídelo en partes.');
+  const base = file.name.replace(/\.[^.]+$/, ''); const out = [];
+  const row = document.createElement('div'); row.className = 'upl'; row.innerHTML = `<span>${esc(file.name)} → ${n} diapositivas</span><div class="bar"><i style="width:0"></i></div><b>0/${n}</b>`; box.appendChild(row);
+  for (let i = 0; i < n; i++) {
+    const d = await PDFLib.PDFDocument.create(); const [pg] = await d.copyPages(src, [i]); d.addPage(pg);
+    const f = new File([await d.save()], `${base} - ${i + 1}.pdf`, { type: 'application/pdf' });
+    const r = await subirArchivo(f, () => { });
+    out.push({ id: 'd' + Date.now().toString(36) + i, tipo: 'documento', titulo: `${base} · ${i + 1}`, driveId: r.id, mime: r.mime });
+    $('i', row).style.width = (i + 1) / n * 100 + '%'; $('b', row).textContent = `${i + 1}/${n}`;
+  }
+  return out;
 }
 /* ---------- Generador de actividades con IA (a partir del tema, la sesión o un documento) ---------- */
 function cargarLib(src) { return new Promise((res, rej) => { if (document.querySelector(`script[src="${src}"]`)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar la librería para leer el archivo. Revisa tu internet.')); document.head.appendChild(s); }); }
