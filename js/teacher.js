@@ -53,7 +53,7 @@ async function arrancar() {
 }
 function ir(t) {
   clearInterval(T.timer); T.tab = t; shell('');
-  clearInterval(T.tick);
+  clearInterval(T.tick); if (T.keyH) { document.removeEventListener('keydown', T.keyH); T.keyH = null; }
   ({ ctrl: vCtrl, vivo: vVivo, corr: vCorr, res: vRes, est: vEst, ses: vSes, inf: vInf, cfg: vCfg })[t]();
 }
 function selSesion(id = 'sel') {
@@ -134,54 +134,97 @@ function tilesDocente(p) {
   if (p.tipo === 'numerica') return `<p class="mut">Respuesta correcta: <b>${esc(p.correcta)}</b></p>`;
   return '';
 }
+T.auto = (() => { try { return { lanzar: true, cerrar: true, ...JSON.parse(localStorage.getItem('auto') || '{}') }; } catch (e) { return { lanzar: true, cerrar: true }; } })();
+const guardarAuto = () => { try { localStorage.setItem('auto', JSON.stringify(T.auto)); } catch (e) { } };
+function etiquetaAvanzar(c) {
+  const v = c.v, p = c.paso, ult = c.paso && c.paso.idx >= c.n - 1;
+  if (v.ritmo !== 'docente') return '▶ Iniciar clase en vivo';
+  if (!ESACT(p)) return ult ? '🏁 Fin de la clase' : 'Siguiente ▶';
+  if (v.fase === 'espera') return '▶ Lanzar pregunta';
+  if (v.fase === 'pregunta') return c.todos ? '📊 Ver resultados' : '⏹ Cerrar y ver resultados';
+  if (v.fase === 'cerrada') return '📊 Ver resultados';
+  return ult ? '🏁 Fin de la clase' : 'Siguiente ▶';
+}
 async function vCtrl() {
   if (!T.sel) { $('#main').innerHTML = '<div class="card c mut">Crea una sesión primero.</div>'; return; }
-  $('#main').innerHTML = `<div class="card row"><div style="flex:1;min-width:180px">${selSesion()}</div><label class="row" style="margin:0;font-weight:700"><input type="checkbox" id="modo" style="width:22px;min-height:0;height:22px"> Modo en vivo</label><button class="btn sm ghost" id="enl2">✉ Enlace</button><button class="btn sm gold" id="prj">🖥 Proyectar</button></div>
-  <div class="hint" style="margin:-6px 4px 10px">Activa «Modo en vivo» para guiar la clase desde aquí: los estudiantes verán lo que tú habilites (diapositivas y preguntas con cronómetro, como Kahoot).</div>
-  <div id="cv"><div class="c"><span class="spin"></span></div></div><div id="rbar"></div><div id="aipanel"></div>`;
-  $('#sel').onchange = e => { T.sel = e.target.value; T.ckey = ''; T.ai = null; vCtrl(); };
-  $('#modo').onchange = e => accionVivo({ ritmo: e.target.checked ? 'docente' : 'libre' });
-  $('#prj').onclick = proyectar; $('#enl2').onclick = () => enviarEnlaceUI(); T.ckey = '';
-  refrescarCtrl(); T.timer = setInterval(refrescarCtrl, 2000);
-  clearInterval(T.tick); T.tick = setInterval(() => { const c = T.cv; if (!c || c.v.fase !== 'pregunta') return; const left = c.v.t + c.v.dur * 1000 - (Date.now() + c.off); const n = $('#ctm'); if (n) n.textContent = Math.max(0, Math.ceil(left / 1000)) + ' s'; }, 250);
+  const cur = String((T.cfg && T.cfg.cursos) || '').split(',').map(x => x.trim()).filter(Boolean);
+  $('#main').innerHTML = `<div class="card"><div class="row"><div style="flex:1;min-width:150px">${selSesion()}</div>${cur.length > 1 ? `<select id="ccur" style="max-width:150px"><option value="">Todos los cursos</option>${cur.map(c => `<option ${c === T.cursoCtrl ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}</div>
+  <div class="row" style="margin-top:8px"><button class="btn sm ghost" id="enl2">✉ Enlace</button><button class="btn sm ghost" id="vps2">👁 Ver como estudiante</button><button class="btn sm gold" id="prj">🖥 Proyectar</button></div>
+  <label class="row" style="margin:10px 0 0;font-weight:500;font-size:.88rem"><input type="checkbox" id="au1" ${T.auto.lanzar ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Lanzar cada pregunta al llegar a ella</label>
+  <label class="row" style="margin:6px 0 0;font-weight:500;font-size:.88rem"><input type="checkbox" id="au2" ${T.auto.cerrar ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Cerrar cuando todos hayan respondido</label></div>
+  <div id="cv"><div class="c"><span class="spin"></span></div></div><div id="rbar"></div><div id="aipanel"><div id="aires"></div></div>`;
+  $('#sel').onchange = e => { T.sel = e.target.value; T.ckey = ''; T.sig = ''; vCtrl(); };
+  if ($('#ccur')) $('#ccur').onchange = e => { T.cursoCtrl = e.target.value; T.sig = ''; refrescarCtrl(true); };
+  $('#au1').onchange = e => { T.auto.lanzar = e.target.checked; guardarAuto(); }; $('#au2').onchange = e => { T.auto.cerrar = e.target.checked; guardarAuto(); };
+  $('#prj').onclick = proyectar; $('#enl2').onclick = () => enviarEnlaceUI(); $('#vps2').onclick = () => verComoEstudiante(T.sel);
+  T.ckey = ''; T.sig = '';
+  // gestos: deslizar a la izquierda = avanzar, a la derecha = retroceder
+  let x0 = null, y0 = 0; const cv = $('#cv');
+  cv.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  cv.addEventListener('touchend', e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null; if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 2) accionVivo({ op: dx < 0 ? 'avanzar' : 'anterior' }); });
+  // teclado / control remoto de presentaciones: → ← PgDn PgUp espacio
+  if (T.keyH) document.removeEventListener('keydown', T.keyH);
+  T.keyH = ev => { if (/INPUT|TEXTAREA|SELECT/.test((ev.target.tagName || '')) || ev.target.isContentEditable) return; if (['ArrowRight', 'PageDown', ' '].includes(ev.key)) { ev.preventDefault(); accionVivo({ op: 'avanzar' }); } else if (['ArrowLeft', 'PageUp'].includes(ev.key)) { ev.preventDefault(); accionVivo({ op: 'anterior' }); } };
+  document.addEventListener('keydown', T.keyH);
+  refrescarCtrl(true); T.timer = setInterval(refrescarCtrl, 2000);
+  clearInterval(T.tick);
+  T.tick = setInterval(() => {
+    const c = T.cv; if (!c) return; const v = c.v; const n = $('#ctm'), b = $('#ctb'); if (!n) return;
+    if (v.fase === 'pregunta') { const left = v.t + v.dur * 1000 - (Date.now() + c.off); n.textContent = Math.max(0, Math.ceil(left / 1000)) + ' s'; n.classList.toggle('urg', left < 5000); if (b) b.style.width = Math.max(0, left / (v.dur * 1000)) * 100 + '%'; }
+    else { n.textContent = v.dur + ' s'; n.classList.remove('urg'); if (b) b.style.width = '100%'; }
+  }, 250);
 }
 async function accionVivo(d) {
   if (T.busy) return; T.busy = true; $$('.remote .btn').forEach(b => b.disabled = true);
-  const q = { ...d }; if (!q.ritmo && T.cv && T.cv.v.ritmo !== 'docente') q.ritmo = 'docente';   // al mover, se activa el modo en vivo solo
+  const q = { ...d }; if (['avanzar', 'anterior', 'siguiente', 'ir'].includes(q.op)) q.auto = T.auto.lanzar;
+  if (!q.ritmo && T.cv && T.cv.v.ritmo !== 'docente' && q.op !== 'tiempo') q.ritmo = 'docente';   // al mover, se activa el modo en vivo solo
   try { await API.call('docVivoAccion', { sesion: T.sel, ...q }); T.busy = false; await refrescarCtrl(true); }
   catch (e) { T.busy = false; $$('.remote .btn').forEach(b => b.disabled = false); manejar(e); }
 }
 async function refrescarCtrl(forzar) {
   if (!$('#cv') || (document.hidden && !forzar) || (T.busy && !forzar)) return;
-  let c; try { c = await API.call('docVivo', { sesion: T.sel }); } catch (e) { return manejar(e); }
+  let c; try { c = await API.call('docVivo', { sesion: T.sel, curso: T.cursoCtrl || '' }); } catch (e) { return manejar(e); }
   c.off = c.v.ahora - Date.now(); T.cv = c; const v = c.v, p = c.paso;
-  const modo = $('#modo'); if (modo && document.activeElement !== modo) modo.checked = v.ritmo === 'docente';
-  const act = ESACT(p); const resp = c.agregado ? c.agregado.n : 0; const enVivo = v.ritmo === 'docente';
-  let h = `<div class="card"><div class="row"><span class="chip navy">${c.paso ? c.paso.idx + 1 : 0} / ${c.n}</span><span class="chip ${enVivo ? 'ok' : ''}">${enVivo ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes} conectados</span>${enVivo ? `<span class="chip ${c.viendo >= c.presentes && c.presentes ? 'ok' : 'warn'}" title="Estudiantes que ya ven este mismo paso">👁 ${c.viendo} de ${c.presentes} ven este paso</span>` : ''}${v.fase === 'pregunta' ? '<b id="ctm" style="font:800 1.4rem Poppins"></b>' : ''}</div>`;
+  const act = ESACT(p); const enVivo = v.ritmo === 'docente';
+  const kAuto = v.paso + '|' + v.t;
+  if (T.auto.cerrar && enVivo && act && v.fase === 'pregunta' && c.todos && T.autoKey !== kAuto) { T.autoKey = kAuto; return accionVivo({ op: 'cerrar' }); }
+  const sig = JSON.stringify({ ...c, off: 0, v: { ...c.v, ahora: 0 } });
+  const key = [v.paso, v.fase, c.todos, enVivo].join('|');
+  if (sig === T.sig && key === T.ckey && !forzar) return;
+  T.sig = sig;
+  const chips = arr => arr.map(n => `<span class="chip">${esc(n)}</span>`).join('');
+  let h = `<div class="card"><div class="row"><span class="chip navy">${p ? p.idx + 1 : 0} / ${c.n}</span><span class="chip ${enVivo ? 'ok' : ''}">${enVivo ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes}</span>${enVivo ? `<span class="chip ${c.viendo >= c.presentes && c.presentes ? 'ok' : 'warn'}" title="Estudiantes que ya ven este mismo paso">👁 ${c.viendo}/${c.presentes}</span>` : ''}</div>`;
   if (p) {
-    if (!act && p.tipo === 'diapositiva') h += `<div style="margin-top:12px;max-width:460px" class="mini">${slideStage(p, false)}</div>`;
-    else h += `<h3 style="margin-top:12px">${esc(p.pregunta || p.titulo || '(sin título)')}</h3>`;
-    if (!act && p.tipo === 'documento') h += '<p class="mut small">Archivo o enlace incrustado.</p>';
-    h += tilesDocente(p);
-    if (act) h += `<div class="row" style="margin-top:10px"><span class="chip warn">✍️ ${resp} respondieron</span></div>`;
+    if (!act && p.tipo === 'diapositiva') h += `<div style="margin:12px auto 0;max-width:520px" class="mini">${slideStage(p, false)}</div>`;
+    else if (!act) h += `<h3 style="margin-top:12px">${esc(p.titulo || 'Archivo o enlace')}</h3><p class="mut small">Archivo o enlace incrustado.</p>`;
+    else h += `<h3 style="margin-top:12px">${esc(p.pregunta)}</h3>${tilesDocente(p)}`;
   }
   h += '</div>';
-  if (act && c.agregado && v.fase !== 'espera') {
-    h += `<div class="card"><h3>Resultados en vivo</h3>${p.tipo === 'abierta' ? `<p class="small mut">${resp} respuestas abiertas</p>${(c.agregado.textos || []).slice(-6).map(t => `<div class="fb neu small" style="margin:6px 0">${esc(t)}</div>`).join('')}` : aggHtml(p, c.agregado, p.correcta)}</div>`;
+  if (act && enVivo && ['espera', 'pregunta'].includes(v.fase)) h += `<div class="card"><div class="small mut c">${v.fase === 'espera' ? 'Tiempo para responder' : 'Tiempo restante'}</div><div class="tb-num" id="ctm">${v.dur} s</div><div class="tb-bar"><i id="ctb" style="width:100%"></i></div><div class="row" style="justify-content:center;margin-top:10px"><button class="btn sm ghost" data-t="-5">−5 s</button><button class="btn sm ghost" data-t="10">+10 s</button></div></div>`;
+  if (act && enVivo && v.fase !== 'espera') {
+    const pc = c.presentes ? Math.round(c.respondieron / c.presentes * 100) : 0;
+    h += `<div class="card"><div class="row"><b class="sp">✍️ ${c.respondieron} de ${c.presentes} respondieron</b><b>${pc}%</b></div><div class="bar" style="margin-top:8px"><i style="width:${pc}%"></i></div>`;
+    if (c.todos && ['pregunta', 'cerrada'].includes(v.fase)) h += `<div class="fb ok"><b>✅ ¡Todos respondieron!</b><div class="row" style="margin-top:8px"><button class="btn sm" id="bres">📊 Ver resultados a la clase</button><button class="btn sm gold" id="bana">🤖 Analizar ahora</button></div></div>`;
+    else if (c.faltan.length) h += `<div style="margin-top:12px"><b class="small">⏳ Faltan por responder (${c.faltan.length}):</b><div class="row" style="gap:6px;margin-top:6px">${chips(c.faltan)}</div></div>`;
+    if (c.ausentes.length) h += `<details style="margin-top:10px"><summary class="small mut">Sin conectar (${c.ausentes.length})</summary><div class="row" style="gap:6px;margin-top:6px">${chips(c.ausentes)}</div></details>`;
+    h += '</div>';
   }
-  if (v.fase === 'ranking' || (c.ranking.length && ['resultados', 'ranking'].includes(v.fase))) h += `<div class="card"><h3>🏆 Ranking</h3>${podioHtml(c.ranking, '')}</div>`;
-  $('#cv').innerHTML = h + '<div class="remote-pad"></div>';
-  const key = [v.paso, v.fase, v.ritmo].join('|');
+  if (act && c.agregado && enVivo && !['espera'].includes(v.fase)) h += `<div class="card"><h3>Resultados en vivo</h3>${p.tipo === 'abierta' ? `<p class="small mut">${c.agregado.n} respuestas abiertas</p>${(c.agregado.textos || []).slice(-6).map(t => `<div class="fb neu small" style="margin:6px 0">${esc(t)}</div>`).join('')}` : aggHtml(p, c.agregado, p.correcta)}</div>`;
+  if (c.ranking.length && ['resultados', 'ranking'].includes(v.fase)) h += `<div class="card"><h3>🏆 Ranking</h3>${podioHtml(c.ranking, '')}</div>`;
+  h += `<div class="card"><div class="row" style="gap:8px">${act && v.fase === 'pregunta' ? '<button class="btn sm" id="bcer">⏹ Cerrar ahora</button>' : ''}${act ? '<button class="btn sm ghost" id="bana2">🤖 Analizar esta pregunta</button><button class="btn sm ghost" id="brk">🏆 Ranking</button>' : ''}${p && p.tipo === 'abierta' ? '<button class="btn sm gold" id="bcor">⚡ Corregir y devolver feedback</button>' : ''}<button class="btn sm ghost" id="bana3">🤖 Analizar toda la sesión</button></div>
+  <div class="row" style="margin-top:10px"><select id="rj" style="flex:1">${c.pasos.map(q => `<option value="${q.i}" ${q.i === v.paso ? 'selected' : ''}>${q.i + 1}. ${esc((q.titulo || '').slice(0, 40))} · ${q.tipo}</option>`).join('')}</select><button class="btn sm ghost" id="rt">Ir</button></div>
+  ${enVivo ? '<button class="btn sm ghost block" id="bfin" style="margin-top:10px">Terminar modo en vivo (ritmo libre)</button>' : '<div class="info">Ritmo libre: los estudiantes avanzan solos. Con la flecha ▶ inicias la clase en vivo.</div>'}</div><div class="remote-pad"></div>`;
+  $('#cv').innerHTML = h;
+  const ev = (id, f) => { const e = $(id); if (e) e.onclick = f; };
+  $$('[data-t]').forEach(b => b.onclick = () => accionVivo({ op: 'tiempo', delta: +b.dataset.t }));
+  ev('#bres', () => accionVivo({ op: 'resultados' })); ev('#bana', () => { analizar('paso'); $('#aires').scrollIntoView({ behavior: 'smooth' }); });
+  ev('#bcer', () => accionVivo({ op: 'cerrar' })); ev('#bana2', () => { analizar('paso'); $('#aires').scrollIntoView({ behavior: 'smooth' }); }); ev('#bana3', () => { analizar('sesion'); $('#aires').scrollIntoView({ behavior: 'smooth' }); });
+  ev('#brk', () => accionVivo({ op: 'ranking' })); ev('#bcor', corregirAhora); ev('#rt', () => accionVivo({ op: 'ir', paso: +$('#rj').value })); ev('#bfin', () => accionVivo({ ritmo: 'libre' }));
   if (key !== T.ckey || forzar) {
-    T.ckey = key; const m = accionPrincipal(c); if ($('#aires')) $('#aires').innerHTML = '';
-    $('#rbar').innerHTML = `<div class="row" style="margin:6px 0"><select id="rj" style="flex:1">${c.pasos.map(q => `<option value="${q.i}" ${q.i === v.paso ? 'selected' : ''}>${q.i + 1}. ${esc((q.titulo || '').slice(0, 45))} · ${q.tipo}</option>`).join('')}</select><button class="btn sm ghost" id="rt">Ir</button></div>
-      ${enVivo ? '' : '<div class="info">Ritmo libre: los estudiantes avanzan solos. Al pulsar cualquier botón se activa el modo en vivo.</div>'}
-      <div class="remote"><button class="btn ghost" id="rp" aria-label="Paso anterior">◀</button><button class="btn ${v.fase === 'pregunta' ? 'red' : 'gold'}" id="rm">${enVivo ? m.t : '▶ Iniciar clase en vivo'}</button><button class="btn ghost" id="rn" aria-label="Paso siguiente">▶</button></div>`;
-    $('#rp').onclick = () => accionVivo({ op: 'anterior' }); $('#rn').onclick = () => accionVivo({ op: 'siguiente' });
-    $('#rm').onclick = () => accionVivo(enVivo ? { op: m.a } : { ritmo: 'docente', op: 'ir', paso: v.paso });
-    $('#rt').onclick = () => accionVivo({ op: 'ir', paso: +$('#rj').value });
-    if (!$('#aibtns')) $('#aipanel').innerHTML = `<div class="card" id="aibtns"><h3>🤖 Análisis inmediato con IA</h3><p class="small mut">Resume cómo le fue al curso <b>sin nombrar a nadie</b> y te sugiere una retroalimentación general que puedes proyectar o enviar a las pantallas de los estudiantes.</p><div class="row"><button class="btn sm" id="a1">Analizar esta pregunta</button><button class="btn sm ghost" id="a2">Analizar toda la sesión</button><button class="btn sm gold" id="a3">⚡ Corregir abiertas y devolver feedback individual</button></div><div id="aires"></div></div>`;
-    $('#a1').onclick = () => analizar('paso'); $('#a2').onclick = () => analizar('sesion'); $('#a3').onclick = corregirAhora;
+    T.ckey = key; if ($('#aires')) $('#aires').innerHTML = '';
+    $('#rbar').innerHTML = `<div class="remote"><button class="btn ghost" id="rp" aria-label="Paso anterior">◀<small>Atrás</small></button><button class="btn ${v.fase === 'pregunta' && enVivo ? 'red' : 'gold'}" id="rm">${etiquetaAvanzar(c)}</button></div>`;
+    $('#rp').onclick = () => accionVivo({ op: 'anterior' });
+    $('#rm').onclick = () => accionVivo(enVivo ? { op: 'avanzar' } : { ritmo: 'docente', op: 'ir', paso: v.paso });
   }
 }
 async function analizar(alcance) {
@@ -334,20 +377,38 @@ function vSes() {
 }
 const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva / video incrustado', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', nube: 'Nube de palabras (Menti)', escala: 'Escala 1 a 5 (Menti)', abierta: 'Pregunta abierta (IA)' };
 function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${etiqueta}</label>${tipo === 'area' ? `<textarea data-k="${k}">${esc(v ?? '')}</textarea>` : `<input data-k="${k}" type="${tipo}" value="${esc(v ?? '')}" ${extra}>`}`; }
+/* ---------- Editor de preguntas "como se ven" (estilo Kahoot): se escribe sobre los recuadros ---------- */
+function tileEd(i, txt, ok, tipo) {
+  return `<div class="tile edt t${i % 4} ${ok ? 'ok' : ''}"><span class="sh">${FORMAS[i % 4]}</span><span class="q-opt" contenteditable="plaintext-only" spellcheck="false" data-opt data-ph="Alternativa ${i + 1}">${esc(txt)}</span>${tipo === 'opcion' ? '<button type="button" class="q-ok" data-a="ok" title="Marcar como respuesta correcta">✓</button>' : ''}<button type="button" class="q-rm" data-a="rmopt" title="Quitar alternativa">✕</button></div>`;
+}
+function preguntaEditor(p) {
+  const tipo = p.tipo; let s = `<div class="edq"><div class="qstage"><div class="q-head" contenteditable="plaintext-only" spellcheck="false" data-k="pregunta" data-ph="${tipo === 'nube' ? 'Escribe la pregunta (ej: ¿Qué palabra asocias con comercio?)' : 'Escribe tu pregunta aquí'}">${esc(p.pregunta)}</div>`;
+  s += `<div class="q-meta"><label title="Tiempo para responder en vivo">⏱ <input data-k="tiempo" type="number" min="5" value="${p.tiempo || ''}" placeholder="${tiempoDefCliente(tipo)}"> s</label>${tipo !== 'encuesta' && tipo !== 'nube' && tipo !== 'escala' ? `<label title="Puntos">⭐ <input data-k="puntos" type="number" step="0.5" min="0" value="${p.puntos ?? 1}"> pts</label>` : `<input data-k="puntos" type="hidden" value="${p.puntos ?? 1}">`}</div>`;
+  if (tipo === 'opcion' || tipo === 'encuesta') {
+    const ops = [...(p.opciones || [])]; while (ops.length < (tipo === 'opcion' ? 4 : 3)) ops.push('');
+    s += `<div class="tiles q-tiles">${ops.map((o, i) => tileEd(i, o, tipo === 'opcion' && i === (p.correcta ?? 0), tipo)).join('')}</div><div class="c" style="margin-top:8px"><button type="button" class="btn sm ghost" data-a="addopt" style="color:#fff;border-color:rgba(255,255,255,.5)">＋ Agregar alternativa</button></div>${tipo === 'opcion' ? '<div class="q-hint">Toca el ✓ de la alternativa correcta.</div>' : '<div class="q-hint">Encuesta: no hay alternativa correcta.</div>'}`;
+  } else if (tipo === 'vf') {
+    s += `<div class="tiles q-tiles"><div class="tile t1 ${p.correcta !== 'F' ? 'ok' : ''}" data-v="V" style="min-height:70px"><span class="sh">✔</span><span>Verdadero</span><button type="button" class="q-ok" data-a="ok">✓</button></div><div class="tile t0 ${p.correcta === 'F' ? 'ok' : ''}" data-v="F" style="min-height:70px"><span class="sh">✖</span><span>Falso</span><button type="button" class="q-ok" data-a="ok">✓</button></div></div><div class="q-hint">Toca el ✓ de la respuesta correcta.</div>`;
+  } else if (tipo === 'numerica') {
+    s += `<div class="q-num"><label>Respuesta correcta <input data-k="correcta" type="number" step="any" value="${p.correcta ?? 0}"></label><label>Tolerancia ± <input data-k="tolerancia" type="number" step="any" value="${p.tolerancia ?? 0.01}"></label></div>`;
+  } else if (tipo === 'nube') {
+    s += '<div class="nube" style="background:#fff;border-radius:14px;margin-top:10px"><span style="font-size:2rem;color:#e21b3c">oferta</span> <span style="font-size:1.3rem;color:#1368ce">precio</span> <span style="font-size:1.7rem;color:#26890c">mercado</span> <span style="font-size:1.1rem;color:#d89e00">demanda</span></div><div class="q-hint">Así se verá la nube con las palabras de los estudiantes.</div>';
+  } else if (tipo === 'escala') {
+    s += '<div class="escala" style="margin-top:10px">' + [1, 2, 3, 4, 5].map(n => `<button type="button" class="esc" disabled>${n}</button>`).join('') + '</div><div class="q-hint">Los estudiantes valoran de 1 a 5. Redacta una afirmación.</div>';
+  } else {
+    s += '<textarea disabled placeholder="Aquí escribirán su respuesta los estudiantes…" style="margin-top:10px;background:#fff"></textarea>';
+  }
+  s += '</div>';
+  if (tipo === 'abierta') s += campo('titulo', 'Título corto (para identificarla)', p.titulo) + campo('campos', 'Campos de respuesta (uno por línea)', (p.campos || ['Tu respuesta']).join('\n'), 'area') + campo('modelo', 'Respuesta modelo / pauta (la usa la IA)', p.modelo, 'area') + campo('rubrica', 'Rúbrica', p.rubrica, 'area');
+  else if (tipo !== 'encuesta' && tipo !== 'nube' && tipo !== 'escala') s += `<details style="margin-top:8px" ${p.explicacion ? 'open' : ''}><summary class="small mut">💡 Explicación (se muestra al responder)</summary>${campo('explicacion', '', p.explicacion, 'area')}</details>`;
+  return s + '</div>';
+}
+function tiempoDefCliente(t) { return { opcion: 20, vf: 15, numerica: 40, encuesta: 30, nube: 45, escala: 20, abierta: 180 }[t] || 20; }
 function pasoForm(p, i) {
   let f = '';
   if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
   else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><div class="imgpanel"></div></div>`;
-  else {
-    f = (p.tipo === 'abierta' ? campo('titulo', 'Título corto', p.titulo) : '') + campo('pregunta', 'Pregunta', p.pregunta, 'area');
-    if (p.tipo === 'opcion' || p.tipo === 'encuesta') f += campo('opciones', 'Opciones (una por línea)', (p.opciones || []).join('\n'), 'area');
-    if (p.tipo === 'opcion') f += campo('correcta', 'N° de la opción correcta (1 = primera)', (p.correcta ?? 0) + 1, 'number');
-    if (p.tipo === 'vf') f += `<label>Correcta</label><select data-k="correcta"><option value="V" ${p.correcta === 'V' ? 'selected' : ''}>Verdadero</option><option value="F" ${p.correcta === 'F' ? 'selected' : ''}>Falso</option></select>`;
-    if (p.tipo === 'numerica') f += campo('correcta', 'Valor correcto', p.correcta, 'number', 'step="any"') + campo('tolerancia', 'Tolerancia', p.tolerancia ?? 0.01, 'number', 'step="any"');
-    if (p.tipo === 'abierta') f += campo('campos', 'Campos de respuesta (uno por línea)', (p.campos || ['Tu respuesta']).join('\n'), 'area') + campo('modelo', 'Respuesta modelo / pauta (la usa la IA)', p.modelo, 'area') + campo('rubrica', 'Rúbrica', p.rubrica, 'area');
-    f += campo('puntos', 'Puntos', p.puntos ?? 1, 'number', 'step="0.5" min="0"') + campo('tiempo', 'Tiempo en vivo (segundos, opcional)', p.tiempo || '', 'number', 'min="5"');
-    if (p.tipo !== 'abierta' && p.tipo !== 'encuesta') f += campo('explicacion', 'Explicación (se muestra al responder)', p.explicacion, 'area');
-  }
+  else f = preguntaEditor(p);
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
 }
 function leerPasos() {
@@ -358,11 +419,10 @@ function leerPasos() {
     if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); return p; }
     p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1; if (+g('tiempo')) p.tiempo = +g('tiempo');
     if (g('titulo') !== undefined) p.titulo = g('titulo');
-    if (p.tipo === 'opcion' || p.tipo === 'encuesta') p.opciones = g('opciones').split('\n').map(x => x.trim()).filter(Boolean);
-    if (p.tipo === 'opcion') p.correcta = (+g('correcta') || 1) - 1;
-    if (p.tipo === 'vf') p.correcta = g('correcta');
+    if (p.tipo === 'opcion' || p.tipo === 'encuesta') { const ops = []; let corr = 0; $$('.q-tiles .tile', c).forEach(t => { const tx = ($('[data-opt]', t).innerText || '').trim(); if (!tx) return; if (t.classList.contains('ok')) corr = ops.length; ops.push(tx); }); p.opciones = ops; if (p.tipo === 'opcion') p.correcta = corr; }
+    if (p.tipo === 'vf') { const t = $('.q-tiles .tile.ok', c); p.correcta = t && t.dataset.v === 'F' ? 'F' : 'V'; }
     if (p.tipo === 'numerica') { p.correcta = +g('correcta'); p.tolerancia = +g('tolerancia') || 0.01; }
-    if (p.tipo === 'abierta') { p.campos = g('campos').split('\n').map(x => x.trim()).filter(Boolean); p.modelo = g('modelo'); p.rubrica = g('rubrica'); }
+    if (p.tipo === 'abierta') { p.campos = (g('campos') || '').split('\n').map(x => x.trim()).filter(Boolean); p.modelo = g('modelo'); p.rubrica = g('rubrica'); }
     if (g('explicacion') !== undefined) p.explicacion = g('explicacion');
     return p;
   });
@@ -380,7 +440,7 @@ function editor() {
   <p class="small mut">Todo en una sola secuencia, en el orden en que se verá: diapositivas, archivos, videos y actividades (estilo Kahoot/Menti). En modo en vivo tú avanzas paso a paso desde el celular.</p>
   <div class="outline row" style="gap:6px">${e.pasos.map((p, i) => `<a href="#" class="chip ${ESACT(p) ? 'warn' : 'navy'}" data-go="${i}" title="${esc(p.titulo || p.pregunta || '')}">${i + 1} ${ICONO[p.tipo] || '•'}</a>`).join('') || '<span class="mut small">Aún no hay pasos.</span>'}</div>
   <div class="row" style="margin-top:12px"><label style="margin:0">Insertar nuevos pasos:</label><select id="pos" style="max-width:330px"><option value="">al final</option>${e.pasos.map((p, i) => `<option value="${i}" ${T.pos === i ? 'selected' : ''}>después del paso ${i + 1} · ${esc((p.titulo || p.pregunta || p.tipo).slice(0, 30))}</option>`).join('')}</select>
-  <select id="addtipo" style="max-width:260px"><option value="">＋ Agregar paso…</option>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}">${ICONO[k] || ''} ${v}</option>`).join('')}</select></div></div>
+  </div><div class="row" style="gap:6px;margin-top:10px">${[['diapositiva', '🖼 Diapositiva'], ['opcion', '🔺 Opción múltiple'], ['vf', '✔ V/F'], ['numerica', '🔢 Numérica'], ['encuesta', '📊 Encuesta'], ['nube', '☁ Nube'], ['escala', '⭐ Escala'], ['abierta', '✍ Abierta'], ['documento', '📎 Archivo/enlace']].map(([k, l]) => `<button type="button" class="btn sm" data-add="${k}">${l}</button>`).join('')}</div></div>
   <div id="pasos">${e.pasos.map(pasoForm).join('')}</div>
   <div class="card"><h3>⬆ Subir archivos completos</h3><p class="small mut">Arrastra o elige PDF, PowerPoint, Word, imágenes o videos. Se guardan en tu Drive y quedan dentro de esta sesión; no necesitas copiar nada. Máx. 300 MB por archivo. Se insertan donde indica «Insertar nuevos pasos».</p>
   <div class="grid2"><div class="drop" data-dest="paso">📽️ <b>Como un paso de la clase</b><div class="small mut">PDF, PowerPoint, imagen, video…</div></div><div class="drop" data-dest="split">✂️ <b>PDF → una diapositiva por página</b><div class="small mut">Así puedes meter actividades entre medio</div></div></div>
@@ -395,7 +455,7 @@ function editor() {
   $('#am').onclick = () => { e.pasos = leerPasos(); e.material = [...leerMat(), { tipo: 'video', titulo: '', url: '', descripcion: '' }]; copiarCab(); editor(); };
   const posIns = () => { const v = $('#pos').value; return v === '' ? e.pasos.length : +v + 1; };
   const insertar = (nuevos, mats = []) => { const i = posIns(); const ps = leerPasos(); ps.splice(Math.min(i, ps.length), 0, ...nuevos); e.pasos = ps; e.material = [...leerMat(), ...mats]; copiarCab(); T.pos = i + nuevos.length - 1; editor(); };
-  $('#addtipo').onchange = ev => { const t = ev.target.value; if (t) insertar([nuevoPaso(t)]); };
+  $$('[data-add]').forEach(b => b.onclick = () => insertar([nuevoPaso(b.dataset.add)]));
   $$('[data-go]').forEach(a => a.onclick = ev => { ev.preventDefault(); const el = $$('#pasos .paso-ed')[+a.dataset.go]; if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
   montarIA(e, nuevos => { insertar(nuevos); toast(`${nuevos.length} actividad(es) agregadas. Recuerda pulsar «Guardar».`, 5000); });
   let destino = 'paso';
@@ -422,8 +482,15 @@ function editor() {
   }
   function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
   $('#pasos').onchange = ev => { if (ev.target.dataset.k === 'tipo') { const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); ps[i] = { id: ps[i].id, tipo: ps[i].tipo, titulo: ps[i].titulo, texto: ps[i].texto, pregunta: ps[i].pregunta, puntos: ps[i].puntos || 1, opciones: ['', '', '', ''], correcta: ps[i].tipo === 'vf' ? 'V' : 0, campos: ['Tu respuesta'] }; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); } };
-  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || a === 'img' || a === 'noimg') return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
-  const rerender = () => { e.pasos = leerPasos(); e.material = leerMat(); copiarCab(); const sc = scrollY; editor(); scrollTo(0, sc); };
+  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || ['img', 'noimg', 'ok', 'addopt', 'rmopt'].includes(a)) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
+  $('#pasos').addEventListener('click', ev => {
+    const a = ev.target.dataset.a; if (!['ok', 'addopt', 'rmopt'].includes(a)) return;
+    const card = ev.target.closest('.paso-ed'); const tipo = $('[data-k="tipo"]', card).value; const box = $('.q-tiles', card);
+    const renum = () => $$('.tile', box).forEach((t, i) => { if (tipo === 'vf') return; t.className = `tile edt t${i % 4}${t.classList.contains('ok') ? ' ok' : ''}`; $('.sh', t).textContent = FORMAS[i % 4]; $('[data-opt]', t).dataset.ph = 'Alternativa ' + (i + 1); });
+    if (a === 'ok') { const t = ev.target.closest('.tile'); $$('.tile', box).forEach(x => x.classList.remove('ok')); t.classList.add('ok'); }
+    else if (a === 'addopt') { const n = $$('.tile', box).length; if (n >= 6) return toast('Máximo 6 alternativas.'); box.insertAdjacentHTML('beforeend', tileEd(n, '', false, tipo)); renum(); const nt = $$('.tile', box)[n]; $('[data-opt]', nt).focus(); }
+    else if (a === 'rmopt') { if ($$('.tile', box).length <= 2) return toast('Debe haber al menos 2 alternativas.'); ev.target.closest('.tile').remove(); if (tipo === 'opcion' && !$('.tile.ok', box)) $('.tile', box).classList.add('ok'); renum(); }
+  });  const rerender = () => { e.pasos = leerPasos(); e.material = leerMat(); copiarCab(); const sc = scrollY; editor(); scrollTo(0, sc); };
   $('#pasos').addEventListener('change', ev => { const k = ev.target.dataset.k; if (k === 'layout' || k === 'tema') rerender(); });
   $('#pasos').addEventListener('click', ev => {
     const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg') return;
