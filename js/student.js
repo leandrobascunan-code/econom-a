@@ -240,8 +240,8 @@ function pintarVivo() {
     timer = '<div class="timer"><i id="tbar"></i><b id="tnum"></b></div>';
     body = r ? '<div class="card c big-msg"><div class="emoji">✅</div><h2>¡Respuesta enviada!</h2><p class="mut">Espera los resultados…</p></div>' : `<div class="card">${cuerpoActividad(p)}</div>`;
   } else body = '<div id="vres"><div class="c"><span class="spin"></span></div></div>';
-  montarPart(`<div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><span class="alias sp">${esc(S.perfil.nombre || 'Participante')}</span><span class="chip navy">En vivo</span><button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div>${timer}`, body);
-  $('#sal').onclick = terminarPart;
+  montarPart(`<div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><span class="alias sp">${esc(S.perfil.nombre || 'Participante')}</span><span class="chip navy">En vivo</span><button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div>${timer}`, body, retroSheet());
+  $('#sal').onclick = terminarPart; const rh = $('#rsh'); if (rh) rh.onclick = () => { S.retroMin = !S.retroMin; $('.retro-sheet').classList.toggle('min', S.retroMin); $('span', rh).textContent = S.retroMin ? '▲ ver' : '▼ ocultar'; };
   if (act && v.fase === 'pregunta') {
     const tic = () => {
       const left = v.t + v.dur * 1000 - (Date.now() + v.off); const f = Math.max(0, left / (v.dur * 1000));
@@ -262,9 +262,13 @@ async function cargarResultados(p, clave, intento = 0) {
   } else {
     h = miResultadoHtml(p, d) + (v.fase === 'resultados' ? `<div class="card">${aggHtml(p, d.agregado, d.correcta)}</div>` : '');
   }
-  if (d.retro) h += `<div class="card retro"><b>🧑‍🏫 Retroalimentación para el curso</b><p>${md(d.retro)}</p></div>`;
   box.innerHTML = h;
   if (p.tipo === 'abierta' && d.mi && d.mi.puntaje === null && intento < 30) setTimeout(() => cargarResultados(p, clave, intento + 1), 4000);
+}
+/** Hoja fija al pie: la retroalimentación se ve en la misma pantalla, sin tener que bajar. */
+function retroSheet() {
+  const v = S.vivo; if (!v || !v.retro) return '';
+  return `<div class="retro-sheet ${S.retroMin ? 'min' : ''}"><button type="button" class="rs-h" id="rsh">🧑‍🏫 Retroalimentación para el curso <span>${S.retroMin ? '▲ ver' : '▼ ocultar'}</span></button><div class="rs-b">${textoRico(v.retro)}</div></div>`;
 }
 function miResultadoHtml(p, d) {
   const m = d.mi;

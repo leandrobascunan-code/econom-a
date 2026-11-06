@@ -218,8 +218,8 @@ async function refrescarCtrl(forzar, datos) {
   $('#cv').innerHTML = h;
   const ev = (id, f) => { const e = $(id); if (e) e.onclick = f; };
   $$('[data-dt]').forEach(b => b.onclick = () => accionVivo({ op: 'tiempo', delta: +b.dataset.dt }));
-  ev('#bres', () => accionVivo({ op: 'resultados' })); ev('#bana', () => { analizar('paso'); $('#aires').scrollIntoView({ behavior: 'smooth' }); });
-  ev('#bcer', () => accionVivo({ op: 'cerrar' })); ev('#bana2', () => { analizar('paso'); $('#aires').scrollIntoView({ behavior: 'smooth' }); }); ev('#bana3', () => { analizar('sesion'); $('#aires').scrollIntoView({ behavior: 'smooth' }); });
+  ev('#bres', () => accionVivo({ op: 'resultados' })); ev('#bana', () => { analizar('paso'); });
+  ev('#bcer', () => accionVivo({ op: 'cerrar' })); ev('#bana2', () => { analizar('paso'); }); ev('#bana3', () => { analizar('sesion'); });
   ev('#brk', () => accionVivo({ op: 'ranking' })); ev('#bcor', corregirAhora); ev('#rt', () => accionVivo({ op: 'ir', paso: +$('#rj').value })); ev('#bfin', () => accionVivo({ ritmo: 'libre' }));
   if (key !== T.ckey || forzar) {
     T.ckey = key; if ($('#aires')) $('#aires').innerHTML = '';
@@ -228,24 +228,32 @@ async function refrescarCtrl(forzar, datos) {
     $('#rm').onclick = () => accionVivo(enVivo ? { op: 'avanzar' } : { ritmo: 'docente', op: 'ir', paso: v.paso });
   }
 }
+/** Hoja inferior fija (misma pantalla, con desplazamiento propio): ya no hay que bajar a buscar el resultado. */
+function hojaIA(titulo, html) {
+  let s = $('#iasheet'); if (!s) { s = document.createElement('div'); s.id = 'iasheet'; s.className = 'ia-sheet'; document.body.appendChild(s); }
+  s.innerHTML = `<div class="ia-h"><b class="sp">${titulo}</b><button type="button" class="btn sm ghost" id="iax" aria-label="Cerrar">✕</button></div><div class="ia-b">${html}</div>`;
+  $('#iax').onclick = () => s.remove(); return $('.ia-b', s);
+}
 async function analizar(alcance) {
-  const box = $('#aires'); box.innerHTML = '<p><span class="spin"></span> Analizando…</p>';
+  hojaIA('🤖 Análisis de los resultados', '<p><span class="spin"></span> Analizando los resultados…</p>');
   try {
     const a = await API.call('docAnalisisIA', { sesion: T.sel, alcance, paso: T.cv?.v.paso });
     const li = arr => arr.length ? '<ul>' + arr.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : '<p class="mut small">—</p>';
-    box.innerHTML = `<div class="fb neu" style="margin-top:12px"><b>Resumen:</b> ${esc(a.resumen)}</div><div class="grid2"><div><b>✅ Logros</b>${li(a.logros)}</div><div><b>⚠️ Dificultades</b>${li(a.dificultades)}</div></div><b>💡 Para la próxima clase</b>${li(a.recomendaciones)}
-    <label>Retroalimentación general para el curso (puedes editarla)</label><textarea id="rmsg">${esc(a.mensaje_clase)}</textarea><div class="row" style="margin-top:8px"><button class="btn sm gold" id="rshare">📣 Mostrar a los estudiantes</button><span class="hint">Aparece en sus pantallas, sin nombres.</span></div>`;
-    $('#rshare').onclick = async () => { try { await API.call('docCompartirRetro', { sesion: T.sel, texto: $('#rmsg').value }); toast('Retroalimentación enviada a la clase ✅'); } catch (e) { manejar(e); } };
-  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') manejar(e); }
+    hojaIA('🤖 Análisis de los resultados', `<label style="margin-top:0">Retroalimentación de contenido para el curso (puedes editarla)</label><textarea id="rmsg" style="min-height:140px">${esc(a.mensaje_clase)}</textarea>
+    <div class="row" style="margin-top:8px"><button class="btn gold" id="rshare">📣 Mostrar a los estudiantes</button><span class="hint">Aparece fija en sus pantallas, sin nombres.</span></div>
+    <div class="fb neu" style="margin-top:14px"><b>Qué muestran los resultados:</b> ${esc(a.resumen)}</div>
+    <div class="grid2"><div><b>✅ Lo que dominan</b>${li(a.logros)}</div><div><b>⚠️ Errores detectados</b>${li(a.dificultades)}</div></div><b>💡 Qué re-explicar</b>${li(a.recomendaciones)}`);
+    $('#rshare').onclick = async () => { try { await API.call('docCompartirRetro', { sesion: T.sel, texto: $('#rmsg').value }); toast('Retroalimentación enviada a la clase ✅'); $('#iasheet').remove(); } catch (e) { manejar(e); } };
+  } catch (e) { hojaIA('🤖 Análisis de los resultados', `<div class="err">${esc(e.message)}</div>`); if (e.code === 'SESION_EXPIRADA') manejar(e); }
 }
 async function corregirAhora() {
   const p = T.cv?.paso; if (!p || p.tipo !== 'abierta') return toast('Ubícate en una pregunta abierta para corregirla.');
-  const box = $('#aires'); box.innerHTML = '<p><span class="spin"></span> Corrigiendo con IA…</p>'; let tot = 0;
+  hojaIA('⚡ Corrección con IA', '<p><span class="spin"></span> Corrigiendo con IA…</p>'); let tot = 0;
   try {
     for (let i = 0; i < 40; i++) { const d = await API.call('docCorregirIA', { sesion: T.sel, paso: p.id }); tot += d.corregidas; if (!d.pendientes || (!d.corregidas && d.fallos)) break; }
     const ap = await API.call('docAprobarIA', { sesion: T.sel, paso: p.id });
-    box.innerHTML = `<div class="fb ok" style="margin-top:12px">✅ Corregidas: ${tot} · Aprobadas y devueltas a los estudiantes: ${ap.aprobadas}. Cada estudiante ve su retroalimentación individual en su pantalla.</div>`;
-  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+    hojaIA('⚡ Corrección con IA', `<div class="fb ok">✅ Corregidas: ${tot} · Devueltas a los estudiantes: ${ap.aprobadas}. Cada estudiante ve su retroalimentación individual de contenido en su pantalla.</div>`);
+  } catch (e) { hojaIA('⚡ Corrección con IA', `<div class="err">${esc(e.message)}</div>`); }
 }
 /** Pantalla de proyección para el proyector / pizarra digital */
 function proyectar() {
@@ -266,7 +274,7 @@ function proyectar() {
     else if (v.fase === 'ranking') cuerpo = `<h1>🏆 Ranking</h1><div style="max-width:700px">${podioHtml(c.ranking, '')}</div>`;
     else if (v.fase === 'espera') cuerpo = `<h1>${esc(p.pregunta)}</h1>${tilesDocente({ ...p, correcta: -1 })}<p class="mut">Prepárate…</p>`;
     else if (v.fase === 'pregunta') cuerpo = `<div class="row"><h1 class="sp">${esc(p.pregunta)}</h1><b id="ptm" style="font:800 4rem Poppins;color:#ffd23f"></b></div>${tilesDocente({ ...p, correcta: -1 })}<p style="font-size:1.4rem">✍️ ${c.agregado ? c.agregado.n : 0} / ${c.presentes} respondieron</p>`;
-    else cuerpo = `<h1>${esc(p.pregunta)}</h1><div style="background:var(--card);color:var(--ink);border-radius:20px;padding:16px">${p.tipo === 'abierta' ? `<p>${c.agregado.n} respuestas</p>` : aggHtml(p, c.agregado, p.correcta)}</div>${v.retro ? `<div class="card retro" style="color:var(--ink);margin-top:14px"><b>🧑‍🏫 Retroalimentación</b><p style="font-size:1.2rem">${md(v.retro)}</p></div>` : ''}`;
+    else cuerpo = `<h1>${esc(p.pregunta)}</h1><div class="proj-grid ${v.retro ? 'dos' : ''}"><div class="proj-card">${p.tipo === 'abierta' ? `<p>${c.agregado.n} respuestas</p>` : aggHtml(p, c.agregado, p.correcta)}</div>${v.retro ? `<div class="proj-card retro"><b>🧑‍🏫 Retroalimentación</b><div class="rp">${textoRico(v.retro)}</div></div>` : ''}</div>`;
     w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip">👥 ${c.presentes}</span></div>${cuerpo}${v.paso === 0 && v.fase !== 'pregunta' ? '<div class="row qrbox" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div>' : ''}</div>`;
     if ($('#pqr')) new QRCode($('#pqr'), { text: base, width: 140, height: 140, correctLevel: QRCode.CorrectLevel.M });
   };
@@ -382,7 +390,37 @@ function vSes() {
 }
 const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva / video incrustado', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', nube: 'Nube de palabras (Menti)', escala: 'Escala 1 a 5 (Menti)', abierta: 'Pregunta abierta (IA)' };
 function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${etiqueta}</label>${tipo === 'area' ? `<textarea data-k="${k}">${esc(v ?? '')}</textarea>` : `<input data-k="${k}" type="${tipo}" value="${esc(v ?? '')}" ${extra}>`}`; }
-/** Galería de diseños tipo Canva: muestra TU diapositiva en cada diseño y cada color para elegir con un toque. */
+const PH_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb2f0"/><stop offset="1" stop-color="#2f6fb5"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="600" cy="180" r="90" fill="#ffffff55"/><path d="M0 600 L260 330 L430 480 L560 380 L800 600Z" fill="#ffffff44"/></svg>');
+/** Efectos y diseño de una diapositiva (o de TODA la presentación): 3D, formas, filtros, diseño y color, con vista previa. */
+function modalEstilo(ed, rerender, global) {
+  const slides = $$('#pasos .edslide'); if (!slides.length) return toast('Aún no hay diapositivas.');
+  const base = ed || slides[0];
+  const val = k => { const e = $(`[data-k="${k}"]`, base); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
+  const m0 = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || PH_IMG, layout: val('layout'), tema: val('tema'), fx: val('fx'), forma: val('forma') || 'completa', filtro: val('filtro') };
+  const opts = (obj, actual, vacio) => (global ? '<option value="__">(no cambiar)</option>' : '') + (vacio ? `<option value="" ${!global && !actual ? 'selected' : ''}>${vacio}</option>` : '') + Object.entries(obj).map(([k, v]) => `<option value="${k}" ${!global && actual === k ? 'selected' : ''}>${v}</option>`).join('');
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">${global ? '🎨 Estilo de toda la presentación' : '✨ Efectos y diseño de la diapositiva'}</h3><button type="button" class="btn sm ghost" id="ex" aria-label="Cerrar">✕</button></div>
+  <div class="fxprev" id="fxp"></div>
+  <div class="grid2"><div><label>Diseño</label><select id="s_lay">${opts(LAYOUTS, m0.layout)}</select></div><div><label>Color</label><select id="s_tema">${opts(TEMAS, m0.tema)}</select></div>
+  <div><label>Efecto 3D / animación</label><select id="s_fx">${opts(FXS, m0.fx, 'Ninguno')}</select></div><div><label>Forma de la imagen</label><select id="s_forma">${opts(FORMAS_IMG, m0.forma)}</select></div>
+  <div><label>Filtro de imagen</label><select id="s_filtro">${opts(FILTROS, m0.filtro, 'Sin filtro')}</select></div></div>
+  ${global ? '<div class="hint">Se aplica a todas las diapositivas. «(no cambiar)» respeta lo que ya tiene cada una.</div>' : '<label class="row" style="font-weight:500"><input type="checkbox" id="s_all" style="width:20px;min-height:0;height:20px"> Aplicar también a todas las diapositivas</label>'}
+  <div class="row" style="margin-top:14px"><button type="button" class="btn gold" id="s_ok">Aplicar</button><button type="button" class="btn ghost" id="s_no">Cancelar</button></div><div class="hint">Los efectos 3D, formas y filtros se aprecian con una imagen. Aquí ves una de ejemplo si la diapositiva no tiene.</div></div>`;
+  document.body.appendChild(m);
+  const cerrar = () => { m.remove(); document.removeEventListener('keydown', escE); }; const escE = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', escE);
+  const sel = id => $('#' + id, m).value; const v_ = (id, orig) => { const x = sel(id); return x === '__' ? orig : x; };
+  const pint = () => { const o = { ...m0, layout: v_('s_lay', m0.layout), tema: v_('s_tema', m0.tema), fx: v_('s_fx', m0.fx), forma: v_('s_forma', m0.forma), filtro: v_('s_filtro', m0.filtro) }; $('#fxp', m).innerHTML = `<div class="mini">${slideStage(o, false)}</div>`; };
+  $$('select', m).forEach(s => s.onchange = pint); pint();
+  $('#ex', m).onclick = cerrar; $('#s_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
+  $('#s_ok', m).onclick = () => {
+    const todos = global || ($('#s_all', m) && $('#s_all', m).checked); const objetivos = todos ? slides : [base];
+    objetivos.forEach(s => {
+      const set = (k, id) => { const x = sel(id); if (x === '__') return; const e = $(`[data-k="${k}"]`, s); if (e) e.value = x; };
+      set('layout', 's_lay'); set('tema', 's_tema'); set('fx', 's_fx'); set('forma', 's_forma'); set('filtro', 's_filtro');
+    });
+    cerrar(); rerender();
+  };
+}/** Galería de diseños tipo Canva: muestra TU diapositiva en cada diseño y cada color para elegir con un toque. */
 function galeria(ed, rerender) {
   const val = k => { const e = $(`[data-k="${k}"]`, ed); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
   const ph = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb2f0"/><stop offset="1" stop-color="#2f6fb5"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="600" cy="180" r="90" fill="#ffffff55"/><path d="M0 600 L260 330 L430 480 L560 380 L800 600Z" fill="#ffffff44"/></svg>');
@@ -427,7 +465,7 @@ function tiempoDefCliente(t) { return { opcion: 20, vf: 15, numerica: 40, encues
 function pasoForm(p, i) {
   let f = '';
   if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
-  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><div class="imgpanel"></div></div>`;
+  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm" data-a="fx">✨ Efectos</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><input type="hidden" data-k="fx" value="${esc(p.fx || '')}"><input type="hidden" data-k="forma" value="${esc(p.forma || '')}"><input type="hidden" data-k="filtro" value="${esc(p.filtro || '')}"><div class="imgpanel"></div></div>`;
   else f = preguntaEditor(p);
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
 }
@@ -436,7 +474,7 @@ function leerPasos() {
     const g = k => { const e = $(`[data-k="${k}"]`, c); if (!e) return undefined; return e.value !== undefined ? e.value : e.innerText.replace(/ /g, ' ').replace(/\n+$/, ''); };
     const p = { id: T.edit.pasos[+c.dataset.i]?.id || 'n' + Math.random().toString(36).slice(2, 7), tipo: g('tipo') };
     if (p.tipo === 'documento') { p.titulo = g('titulo'); p.texto = g('texto'); p.url = g('url'); p.driveId = g('driveId'); p.mime = g('mime'); return p; }
-    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); return p; }
+    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); p.fx = g('fx'); p.forma = g('forma'); p.filtro = g('filtro'); return p; }
     p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1; if (+g('tiempo')) p.tiempo = +g('tiempo');
     if (g('titulo') !== undefined) p.titulo = g('titulo');
     if (p.tipo === 'opcion' || p.tipo === 'encuesta') { const ops = []; let corr = 0; $$('.q-tiles .tile', c).forEach(t => { const tx = ($('[data-opt]', t).innerText || '').trim(); if (!tx) return; if (t.classList.contains('ok')) corr = ops.length; ops.push(tx); }); p.opciones = ops; if (p.tipo === 'opcion') p.correcta = corr; }
@@ -456,7 +494,7 @@ function editor() {
   <div class="grid2"><div><label>Abre (plazo)</label><input id="ap" type="datetime-local" value="${aInputLocal(e.apertura)}"></div><div><label>Cierra (plazo límite para actividades)</label><input id="ci" type="datetime-local" value="${aInputLocal(e.cierre)}"></div></div>
   <label>Modo concentración (bloqueo al salir de la app)</label><select id="bl"><option value="SI" ${e.bloqueo !== 'NO' ? 'selected' : ''}>Activado</option><option value="NO" ${e.bloqueo === 'NO' ? 'selected' : ''}>Desactivado</option></select>
   ${campo('pauta_ia', 'Notas para la IA (errores frecuentes, criterios)', e.pauta_ia, 'area')}</div>
-  <div class="card"><h3 style="margin:0 0 4px">🎬 La clase: presentación con actividades</h3>
+  <div class="card"><div class="row"><h3 class="sp" style="margin:0 0 4px">🎬 La clase: presentación con actividades</h3><button type="button" class="btn sm gold" id="gs">🎨 Estilo de toda la presentación</button></div>
   <p class="small mut">Todo en una sola secuencia, en el orden en que se verá: diapositivas, archivos, videos y actividades (estilo Kahoot/Menti). En modo en vivo tú avanzas paso a paso desde el celular.</p>
   <div class="outline row" style="gap:6px">${e.pasos.map((p, i) => `<a href="#" class="chip ${ESACT(p) ? 'warn' : 'navy'}" data-go="${i}" title="${esc(p.titulo || p.pregunta || '')}">${i + 1} ${ICONO[p.tipo] || '•'}</a>`).join('') || '<span class="mut small">Aún no hay pasos.</span>'}</div>
   <div class="row" style="margin-top:12px"><label style="margin:0">Insertar nuevos pasos:</label><select id="pos" style="max-width:330px"><option value="">al final</option>${e.pasos.map((p, i) => `<option value="${i}" ${T.pos === i ? 'selected' : ''}>después del paso ${i + 1} · ${esc((p.titulo || p.pregunta || p.tipo).slice(0, 30))}</option>`).join('')}</select>
@@ -502,7 +540,7 @@ function editor() {
   }
   function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
   $('#pasos').onchange = ev => { if (ev.target.dataset.k === 'tipo') { const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); ps[i] = { id: ps[i].id, tipo: ps[i].tipo, titulo: ps[i].titulo, texto: ps[i].texto, pregunta: ps[i].pregunta, puntos: ps[i].puntos || 1, opciones: ['', '', '', ''], correcta: ps[i].tipo === 'vf' ? 'V' : 0, campos: ['Tu respuesta'] }; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); } };
-  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || ['img', 'noimg', 'gal', 'ok', 'addopt', 'rmopt'].includes(a)) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
+  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || ['img', 'noimg', 'gal', 'fx', 'ok', 'addopt', 'rmopt'].includes(a)) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
   $('#pasos').addEventListener('click', ev => {
     const a = ev.target.dataset.a; if (!['ok', 'addopt', 'rmopt'].includes(a)) return;
     const card = ev.target.closest('.paso-ed'); const tipo = $('[data-k="tipo"]', card).value; const box = $('.q-tiles', card);
@@ -512,10 +550,12 @@ function editor() {
     else if (a === 'rmopt') { if ($$('.tile', box).length <= 2) return toast('Debe haber al menos 2 alternativas.'); ev.target.closest('.tile').remove(); if (tipo === 'opcion' && !$('.tile.ok', box)) $('.tile', box).classList.add('ok'); renum(); }
   });  const rerender = () => { e.pasos = leerPasos(); e.material = leerMat(); copiarCab(); const sc = scrollY; editor(); scrollTo(0, sc); };
   $('#pasos').addEventListener('change', ev => { const k = ev.target.dataset.k; if (k === 'layout' || k === 'tema') rerender(); });
+  if ($('#gs')) $('#gs').onclick = () => modalEstilo(null, rerender, true);
   $('#pasos').addEventListener('click', ev => {
-    const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg' && a !== 'gal') return;
+    const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg' && a !== 'gal' && a !== 'fx') return;
     const ed = ev.target.closest('.edslide'); const set = (src, cred) => { $('[data-k="imagen"]', ed).value = src; $('[data-k="credito"]', ed).value = cred || ''; rerender(); };
     if (a === 'gal') return galeria(ed, rerender);
+    if (a === 'fx') return modalEstilo(ed, rerender, false);
     if (a === 'noimg') return set('', '');
     const panel = $('.imgpanel', ed); const titulo = ($('[data-k="titulo"]', ed).innerText || '').trim();
     panel.innerHTML = `<div class="card" style="margin-top:8px"><div class="row"><input class="iq" placeholder="Buscar imágenes en internet… (ej: puerto de Valparaíso)" value="${esc(titulo)}" style="flex:1;min-width:180px"><button class="btn sm iqb">🔍 Buscar</button></div><div class="row" style="margin-top:6px"><input class="iu" placeholder="…o pega la dirección (URL) de una imagen" style="flex:1;min-width:180px"><button class="btn sm ghost iub">Usar URL</button><button class="btn sm ghost iup">⬆ Subir</button><input type="file" class="iuf" accept="image/*" hidden></div><div class="imgres"></div><div class="hint">Resultados de Wikimedia Commons y Openverse (licencias libres). El crédito del autor queda en la diapositiva.</div></div>`;
@@ -624,7 +664,7 @@ function montarClaseIA(e, agregar, getCtx) {
         const worker = async () => { while (i < con.length) { const p = con[i++]; try { const r = await buscarImagenes(p.imagen_q); if (r[0]) { p.imagen = r[0].src; p.credito = r[0].credito; } } catch (er) { } hechas++; out.innerHTML = `<p><span class="spin"></span> Buscando imágenes… ${hechas}/${con.length}</p>`; } };
         await Promise.all([worker(), worker(), worker()]);
       }
-      pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; });
+      let kfx = 0; pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; if (p.imagen && ['imagen-derecha', 'imagen-izquierda', 'dividido'].includes(p.layout)) { p.forma = 'tarjeta'; p.fx = ['inclinado', '', 'polaroid', 'flotante'][kfx++ % 4]; } else if (p.imagen && ['fondo', 'portada'].includes(p.layout)) p.fx = 'zoom'; });
       out.innerHTML = `<h3 style="margin-top:14px">Vista previa (${pasos.length} pasos)</h3>` + pasos.map((p, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="idsel" data-i="${i}" checked style="width:20px;min-height:0;height:20px;vertical-align:middle"> <span class="chip ${p.tipo === 'diapositiva' ? 'navy' : 'warn'}">${ICONO[p.tipo] || ''} ${i + 1} · ${p.tipo === 'diapositiva' ? 'Diapositiva' : TIPOS[p.tipo] || p.tipo}</span>${p.tipo === 'diapositiva' ? `<div class="mini" style="max-width:380px;margin-top:8px">${slideStage(p, false)}</div>` : `<div class="small" style="margin-top:6px"><b>${esc(p.pregunta)}</b></div>`}</label>`).join('') + '<button class="btn gold block" id="idadd">➕ Agregar la clase seleccionada</button>';
       $('#idadd').onclick = () => { const sel = $$('.idsel').filter(x => x.checked).map(x => pasos[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos un paso.'); agregar(sel); };
     } catch (er) { out.innerHTML = `<div class="err">${esc(er.message)}</div>`; if (er.code === 'SESION_EXPIRADA') manejar(er); }

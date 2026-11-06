@@ -241,3 +241,49 @@ table.t tr:hover td{background:rgba(47,127,224,.06)}
 .galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:10px 0}.galeria button{border:3px solid transparent;border-radius:14px;padding:0;background:none;cursor:pointer}.galeria button.on{border-color:var(--gold)}.galeria button:hover{border-color:var(--sky)}
 .galeria small{display:block;text-align:center;font-weight:700;margin-top:4px;color:var(--ink)}
 .modal .box.ancho{max-width:920px;max-height:90vh;overflow:auto}
+/* ---- Retroalimentación visible en la misma pantalla ---- */
+.retro-sheet{position:sticky;bottom:0;z-index:6;background:var(--card);border-top:3px solid var(--gold);box-shadow:0 -10px 26px rgba(10,42,102,.25);max-height:44vh;display:flex;flex-direction:column;flex:none}
+.retro-sheet .rs-h{border:0;background:linear-gradient(135deg,var(--gold-l),var(--card));font:700 .92rem Inter,sans-serif;padding:10px 16px;text-align:left;display:flex;justify-content:space-between;gap:10px;cursor:pointer;color:var(--ink);min-height:44px}
+.retro-sheet .rs-b{padding:10px 16px calc(14px + env(safe-area-inset-bottom));overflow:auto;font-size:1rem;line-height:1.45}
+.retro-sheet.min .rs-b{display:none}.rs-b ul{margin:4px 0;padding-left:20px}.rs-b p{margin:0 0 6px}
+.ia-sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(100%,780px);z-index:97;background:var(--card);border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.4);max-height:84vh;display:flex;flex-direction:column}
+.ia-sheet .ia-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}.ia-sheet .ia-b{padding:12px 16px calc(16px + env(safe-area-inset-bottom));overflow:auto}
+.proj-grid{display:grid;gap:16px;margin-top:10px}.proj-grid.dos{grid-template-columns:1.1fr 1fr}.proj-card{background:var(--card);color:var(--ink);border-radius:20px;padding:16px}
+.proj-card.retro{background:linear-gradient(135deg,var(--gold-l),var(--card));border:2px solid var(--gold)}.proj-card.retro .rp{font-size:1.2rem;line-height:1.45}
+@media(max-width:900px){.proj-grid.dos{grid-template-columns:1fr}}
+/* ---- Efectos de imagen, formas y 3D ---- */
+.stage{animation:stIn .55s cubic-bezier(.2,.8,.2,1)}@keyframes stIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+.filt-bn .st-img{filter:grayscale(1) contrast(1.1)}.filt-sepia .st-img{filter:sepia(.85) saturate(1.25) contrast(1.05)}
+.filt-duotono .st-img{filter:grayscale(1) sepia(1) hue-rotate(180deg) saturate(3.2) contrast(1.05)}
+.filt-vivo .st-img{filter:saturate(1.6) contrast(1.1) brightness(1.05)}.filt-suave .st-img{filter:blur(2.5px) brightness(.92)}.filt-oscuro .st-img{filter:brightness(.55) contrast(1.1)}
+/* formas: la imagen se vuelve una pieza independiente (tarjeta, círculo, arco) */
+.forma-tarjeta.lay-imagen-derecha .st-img,.forma-tarjeta.lay-imagen-izquierda .st-img,.forma-tarjeta.lay-dividido .st-img,.forma-circulo.lay-imagen-derecha .st-img,.forma-circulo.lay-imagen-izquierda .st-img,.forma-circulo.lay-dividido .st-img,.forma-arco.lay-imagen-derecha .st-img,.forma-arco.lay-imagen-izquierda .st-img,.forma-arco.lay-dividido .st-img{clip-path:none;top:11%;bottom:11%;box-shadow:0 2.2cqw 4.4cqw rgba(0,0,0,.42)}
+.forma-tarjeta.lay-imagen-derecha .st-img,.forma-circulo.lay-imagen-derecha .st-img,.forma-arco.lay-imagen-derecha .st-img{right:5%;width:36%}
+.forma-tarjeta.lay-imagen-izquierda .st-img,.forma-circulo.lay-imagen-izquierda .st-img,.forma-arco.lay-imagen-izquierda .st-img{left:5%;width:36%}
+.forma-tarjeta.lay-dividido .st-img,.forma-circulo.lay-dividido .st-img,.forma-arco.lay-dividido .st-img{right:5%;width:40%}
+.forma-tarjeta .st-img{border-radius:2.4cqw}
+.forma-circulo.lay-imagen-derecha .st-img,.forma-circulo.lay-imagen-izquierda .st-img,.forma-circulo.lay-dividido .st-img{border-radius:50%;top:50%;bottom:auto;height:34cqw;width:34cqw;margin-top:-17cqw}
+.forma-arco.lay-imagen-derecha .st-img,.forma-arco.lay-imagen-izquierda .st-img,.forma-arco.lay-dividido .st-img{border-radius:50cqw 50cqw 2cqw 2cqw}
+.forma-tarjeta.lay-imagen-arriba .st-img{left:6%;right:6%;top:5%;height:38%;border-radius:2.4cqw;box-shadow:0 2cqw 4cqw rgba(0,0,0,.4)}
+/* 3D */
+.fx-inclinado .st-img,.fx-profundidad .st-img{transform:perspective(1100px) rotateY(-16deg) rotateX(5deg);box-shadow:-2.6cqw 3cqw 5cqw rgba(0,0,0,.5)!important}
+.fx-inclinado.lay-imagen-izquierda .st-img,.fx-profundidad.lay-imagen-izquierda .st-img{transform:perspective(1100px) rotateY(16deg) rotateX(5deg);box-shadow:2.6cqw 3cqw 5cqw rgba(0,0,0,.5)!important}
+.fx-flotante .st-img{animation:flota3d 5.5s ease-in-out infinite;box-shadow:0 3cqw 5cqw rgba(0,0,0,.45)!important}
+@keyframes flota3d{0%,100%{transform:perspective(1100px) translateY(0) rotateY(-8deg) rotateX(2deg)}50%{transform:perspective(1100px) translateY(-1.8cqw) rotateY(-13deg) rotateX(4deg)}}
+.fx-polaroid .st-img{border:1.2cqw solid #fff;border-bottom-width:4.2cqw;border-radius:.8cqw!important;transform:rotate(-4deg);box-shadow:0 2cqw 4cqw rgba(0,0,0,.45)!important}
+.fx-polaroid.lay-imagen-izquierda .st-img{transform:rotate(4deg)}
+.fx-extruido .st-t,.fx-profundidad .st-t{text-shadow:1px 1px 0 var(--ac),2px 2px 0 var(--ac),3px 3px 0 var(--ac),4px 4px 0 var(--ac),5px 5px 0 var(--ac),6px 6px 0 rgba(0,0,0,.35),9px 9px 16px rgba(0,0,0,.4)}
+.fx-profundidad .st-deco:before{content:"";position:absolute;left:62%;top:58%;width:16cqw;height:16cqw;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.55),var(--ac) 45%,rgba(0,0,0,.35));opacity:.75;box-shadow:0 2cqw 4cqw rgba(0,0,0,.35)}
+.fx-zoom .st-img{animation:kb 16s ease-in-out infinite alternate}@keyframes kb{from{transform:scale(1)}to{transform:scale(1.12)}}
+.lay-tarjeta.fx-inclinado .st-txt,.lay-tarjeta.fx-profundidad .st-txt{transform:perspective(1200px) rotateY(-8deg) rotateX(3deg);box-shadow:-2cqw 2.5cqw 5cqw rgba(0,0,0,.5)}
+.lay-tarjeta.fx-flotante .st-txt{animation:flota3d 6s ease-in-out infinite}
+@media (max-width:640px){
+ .stage.forma-tarjeta .st-img,.stage.forma-circulo .st-img,.stage.forma-arco .st-img{left:14%;right:14%;top:4%;bottom:auto;width:72%;height:34%;margin:0;clip-path:none}
+ .stage.forma-circulo .st-img{width:36cqw;height:36cqw;left:50%;right:auto;margin-left:-18cqw;top:4%;border-radius:50%}
+ .stage.forma-arco .st-img{border-radius:40cqw 40cqw 2cqw 2cqw}.stage.forma-tarjeta .st-img{border-radius:3cqw}
+ .stage.forma-tarjeta.lay-imagen-arriba .st-img{left:10%;right:10%}
+ .fx-inclinado .st-img,.fx-profundidad .st-img,.fx-inclinado.lay-imagen-izquierda .st-img,.fx-profundidad.lay-imagen-izquierda .st-img{transform:perspective(900px) rotateX(8deg) rotateY(-8deg)}
+ .stage.forma-circulo.fx-flotante .st-img{margin-left:-18cqw}
+}
+.fxprev{max-width:460px;margin:8px auto 0}
+.edslide .stage,.mini .stage,.modal .stage{animation:none}

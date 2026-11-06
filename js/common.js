@@ -77,6 +77,9 @@ function urlAbrir(m) { return m.driveId ? 'https://drive.google.com/file/d/' + m
 /* ---- Diapositivas visuales (estilo presentación) ---- */
 const LAYOUTS = { portada: 'Portada', titulo: 'Solo título', solo: 'Solo texto', 'imagen-derecha': 'Imagen a la derecha', 'imagen-izquierda': 'Imagen a la izquierda', 'imagen-arriba': 'Imagen arriba', dividido: 'Dividido 50/50', fondo: 'Imagen de fondo', tarjeta: 'Tarjeta sobre imagen', destacado: 'Idea destacada', cita: 'Cita' };
 const TEMAS = { azul: 'Azul marino', claro: 'Claro', oscuro: 'Oscuro', dorado: 'Dorado', oceano: 'Océano', atardecer: 'Atardecer', bosque: 'Bosque', minimal: 'Minimal', marfil: 'Marfil', neon: 'Neón' };
+const FXS = { inclinado: 'Inclinado 3D', flotante: 'Flotante 3D', profundidad: 'Profundidad 3D', polaroid: 'Polaroid', extruido: 'Título en relieve 3D', zoom: 'Zoom suave' };
+const FORMAS_IMG = { completa: 'Completa (según diseño)', tarjeta: 'Tarjeta con sombra', circulo: 'Círculo', arco: 'Arco' };
+const FILTROS = { bn: 'Blanco y negro', sepia: 'Sepia', duotono: 'Duotono azul', vivo: 'Colores vivos', suave: 'Suave', oscuro: 'Oscuro' };
 function inline(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>'); }
 function textoRico(t) {
   let html = '', ul = false;
@@ -90,10 +93,13 @@ function textoRico(t) {
 /** edit=true: título y texto editables directamente sobre la diapositiva */
 function slideStage(p, edit) {
   const lay = LAYOUTS[p.layout] ? p.layout : (p.imagen ? 'imagen-derecha' : 'solo'); const th = TEMAS[p.tema] ? p.tema : 'azul';
+  const fx = FXS[p.fx] ? p.fx : '', fo0 = FORMAS_IMG[p.forma] ? p.forma : 'completa', fi = FILTROS[p.filtro] ? p.filtro : '';
+  const fo = ['inclinado', 'flotante', 'polaroid', 'profundidad'].includes(fx) && fo0 === 'completa' ? 'tarjeta' : fo0;   // los efectos 3D necesitan la imagen como tarjeta
+  const fxCls = (fx ? 'fx-' + fx + ' ' : '') + 'forma-' + fo + (fi ? ' filt-' + fi : '');
   const img = p.imagen ? `<div class="st-img" style="background-image:url('${esc(p.imagen)}')"></div>` : '';
   const t = edit ? `<h2 class="st-t" contenteditable="plaintext-only" spellcheck="false" data-k="titulo" data-ph="Título">${esc(p.titulo)}</h2>` : `<h2 class="st-t">${esc(p.titulo)}</h2>`;
   const b = edit ? `<div class="st-b" contenteditable="plaintext-only" spellcheck="false" data-k="texto" data-ph="Escribe aquí… (usa «- » para viñetas)">${esc(p.texto)}</div>` : `<div class="st-b">${textoRico(p.texto)}</div>`;
-  return `<div class="stage th-${th} lay-${lay} ${p.imagen ? 'con-img' : ''}"><div class="st-deco"></div>${img}<div class="st-txt">${t}${b}</div>${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
+  return `<div class="stage th-${th} lay-${lay} ${p.imagen ? 'con-img' : ''} ${fxCls}"><div class="st-deco"></div>${img}<div class="st-txt">${t}${b}</div>${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
 }
 /** Reduce el tamaño del texto de cada diapositiva hasta que quepa completo (nada se corta, ni arriba ni abajo). */
 function ajustarDiapos(root) {
