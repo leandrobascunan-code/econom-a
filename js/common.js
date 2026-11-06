@@ -74,6 +74,37 @@ function bloqueEmbed(m) {
   return `<div class="doc ${e.video ? 'v' : ''}"><iframe src="${esc(e.src)}" allow="fullscreen; autoplay; encrypted-media" allowfullscreen loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
 }
 function urlAbrir(m) { return m.driveId ? 'https://drive.google.com/file/d/' + m.driveId + '/view' : (m.url || ''); }
+/* ---- Diapositivas visuales (estilo presentación) ---- */
+const LAYOUTS = { portada: 'Portada', 'imagen-derecha': 'Imagen a la derecha', 'imagen-izquierda': 'Imagen a la izquierda', solo: 'Solo texto', destacado: 'Destacado', fondo: 'Imagen de fondo' };
+const TEMAS = { azul: 'Azul marino', claro: 'Claro', oscuro: 'Oscuro', dorado: 'Dorado' };
+function inline(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>'); }
+function textoRico(t) {
+  let html = '', ul = false;
+  String(t || '').split('\n').forEach(l => {
+    const m = /^\s*[-•]\s+(.*)$/.exec(l);
+    if (m) { if (!ul) { html += '<ul>'; ul = true; } html += '<li>' + inline(m[1]) + '</li>'; }
+    else { if (ul) { html += '</ul>'; ul = false; } if (l.trim()) html += '<p>' + inline(l) + '</p>'; }
+  });
+  return html + (ul ? '</ul>' : '');
+}
+/** edit=true: título y texto editables directamente sobre la diapositiva */
+function slideStage(p, edit) {
+  const lay = LAYOUTS[p.layout] ? p.layout : (p.imagen ? 'imagen-derecha' : 'solo'); const th = TEMAS[p.tema] ? p.tema : 'azul';
+  const img = p.imagen ? `<div class="st-img" style="background-image:url('${esc(p.imagen)}')"></div>` : '';
+  const t = edit ? `<h2 class="st-t" contenteditable="plaintext-only" spellcheck="false" data-k="titulo" data-ph="Título">${esc(p.titulo)}</h2>` : `<h2 class="st-t">${esc(p.titulo)}</h2>`;
+  const b = edit ? `<div class="st-b" contenteditable="plaintext-only" spellcheck="false" data-k="texto" data-ph="Escribe aquí… (usa «- » para viñetas)">${esc(p.texto)}</div>` : `<div class="st-b">${textoRico(p.texto)}</div>`;
+  return `<div class="stage th-${th} lay-${lay} ${p.imagen ? 'con-img' : ''}"><div class="st-deco"></div>${img}<div class="st-txt">${t}${b}</div>${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
+}
+/** Busca imágenes libres en internet (Wikimedia Commons y Openverse). Devuelve [{src, thumb, credito}] */
+async function buscarImagenes(q) {
+  const out = []; const limpia = h => String(h || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const ps = [
+    fetch('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=18&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1280&gsrsearch=' + encodeURIComponent(q + ' filetype:bitmap')).then(r => r.json()).then(j => Object.values((j.query && j.query.pages) || {}).forEach(pg => { const ii = pg.imageinfo && pg.imageinfo[0]; if (!ii || !ii.thumburl) return; const m = ii.extmetadata || {}; out.push({ src: ii.thumburl, thumb: ii.thumburl.replace(/\/\d+px-/, '/320px-'), credito: 'Imagen: ' + (limpia(m.Artist && m.Artist.value) || 'Wikimedia Commons') + ' · ' + (limpia(m.LicenseShortName && m.LicenseShortName.value) || 'licencia libre') }); })).catch(() => { }),
+    fetch('https://api.openverse.org/v1/images/?page_size=18&mature=false&q=' + encodeURIComponent(q)).then(r => r.json()).then(j => (j.results || []).forEach(r => { if (r.url) out.push({ src: r.url, thumb: r.thumbnail || r.url, credito: 'Imagen: ' + (limpia(r.creator) || 'autor desconocido') + ' · ' + String(r.license || '').toUpperCase() + (r.license_version ? ' ' + r.license_version : '') }); })).catch(() => { })
+  ];
+  await Promise.all(ps); const vistos = new Set(); return out.filter(x => !vistos.has(x.src) && vistos.add(x.src));
+}
+
 /* ---- Visualización de resultados (compartida por estudiantes y proyección del docente) ---- */
 const FORMAS = ['▲', '◆', '●', '■'];
 function barras(etqs, cuentas, correcta) {

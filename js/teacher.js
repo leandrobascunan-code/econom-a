@@ -64,16 +64,13 @@ function selSesion(id = 'sel') {
 function vVivo() {
   if (!T.sel) { $('#main').innerHTML = '<div class="card c mut">Crea una sesión en la pestaña «Sesiones».</div>'; return; }
   const url = location.href.replace(/docente\.html.*$/, '') + 'index.html?s=' + encodeURIComponent(T.sel);
-  $('#main').innerHTML = `<div class="sidebyside"><div><div class="card"><label>Sesión</label>${selSesion()}<div class="qr" style="margin-top:12px"><div id="qr"></div></div><div class="small mut c" style="margin-top:8px;word-break:break-all">${esc(url)}</div><button class="btn sm ghost block" id="fs" style="margin-top:8px">🖥️ QR a pantalla completa</button></div>
-  <div class="card"><h3>Control de la clase</h3><div class="row"><button class="btn sm ghost" id="rl">Ritmo libre</button><button class="btn sm" id="rd">Guiar yo</button></div><div class="hint">«Guiar yo»: los estudiantes avanzan solo hasta la diapositiva que tú habilites.</div><button class="btn sm gold block" id="vps" style="margin-top:10px">👁 Ver esta sesión como estudiante</button><label>Habilitar paso</label><select id="paso"></select><div class="row" style="margin-top:8px"><button class="btn sm ghost" id="pa">← Atrás</button><button class="btn sm" id="ps">Siguiente →</button></div></div></div>
+  $('#main').innerHTML = `<div class="sidebyside"><div><div class="card"><label>Sesión</label>${selSesion()}<div class="qrbox"><div class="qr" style="margin-top:12px"><div id="qr"></div></div><div class="small mut c" style="margin-top:8px;word-break:break-all">${esc(url)}</div><button class="btn sm ghost block" id="fs" style="margin-top:8px">🖥️ QR a pantalla completa</button></div></div>
+  <div class="card"><h3>Control de la clase</h3><p class="small mut">Para guiar la presentación (avanzar, retroceder, lanzar preguntas) usa la pestaña <b>🎮 Control</b>.</p><button class="btn sm block" id="irc">🎮 Ir al control</button><button class="btn sm gold block" id="vps" style="margin-top:8px">👁 Ver esta sesión como estudiante</button><button class="btn sm ghost block" id="enl" style="margin-top:8px">✉ Enviar enlace por correo</button></div></div>
   <div id="live"><div class="c"><span class="spin"></span></div></div></div>`;
   new QRCode($('#qr'), { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
   $('#sel').onchange = e => { T.sel = e.target.value; vVivo(); };
   $('#fs').onclick = () => { const w = document.createElement('div'); w.className = 'lock'; w.style.background = '#fff'; w.innerHTML = `<div class="c" style="color:#0b2545"><h1 style="font-size:2.2rem">Escanea para participar</h1><div id="qq" style="display:inline-block;padding:16px;background:#fff"></div><p style="font-size:1.1rem">Sesión ${T.sesiones.find(s => s.id === T.sel).numero}</p></div>`; w.onclick = () => w.remove(); document.body.appendChild(w); const sz = Math.min(innerWidth, innerHeight) * .6; new QRCode($('#qq'), { text: url, width: sz, height: sz }); };
-  const ctl = async d => { try { await API.call('docPaso', { sesion: T.sel, ...d }); refrescarVivo(); } catch (e) { manejar(e); } };
-  $('#vps').onclick = () => verComoEstudiante(T.sel);
-  $('#rl').onclick = () => ctl({ ritmo: 'libre' }); $('#rd').onclick = () => ctl({ ritmo: 'docente' });
-  $('#paso').onchange = e => ctl({ paso: +e.target.value }); $('#pa').onclick = () => ctl({ paso: Math.max(0, (T.dash?.sesion.paso_actual || 0) - 1) }); $('#ps').onclick = () => ctl({ paso: Math.min((T.dash?.sesion.pasos.length || 1) - 1, (T.dash?.sesion.paso_actual || 0) + 1) });
+  $('#vps').onclick = () => verComoEstudiante(T.sel); $('#irc').onclick = () => ir('ctrl'); $('#enl').onclick = () => enviarEnlaceUI();
   refrescarVivo(); T.timer = setInterval(refrescarVivo, 8000);
 }
 async function refrescarVivo() {
@@ -82,8 +79,6 @@ async function refrescarVivo() {
   const d = T.dash, s = d.sesion, A = d.alumnos;
   const est = a => a.estado === 'activo' ? (d.ahora - a.ultima > 30000 ? 'sin_senal' : 'activo') : a.estado;
   const n = k => A.filter(a => est(a) === k).length;
-  const pasoSel = $('#paso'); if (pasoSel && document.activeElement !== pasoSel) pasoSel.innerHTML = s.pasos.map((p, i) => `<option value="${i}" ${i === s.paso_actual ? 'selected' : ''}>${i + 1}. ${esc((p.titulo || '').slice(0, 40))} ${p.tipo !== 'diapositiva' ? '· ' + p.tipo : ''}</option>`).join('');
-  $('#rl').className = 'btn sm ' + (s.ritmo === 'libre' ? '' : 'ghost'); $('#rd').className = 'btn sm ' + (s.ritmo === 'docente' ? '' : 'ghost');
   const chip = a => { const e = est(a); return { activo: '<span class="chip ok"><span class="live"></span> Participando</span>', sin_senal: '<span class="chip warn">Sin señal</span>', bloqueado: '<span class="chip bad">Salió · suspendido</span>', autorizado: '<span class="chip navy">Autorizado, esperando</span>', ausente: '<span class="chip">No ha entrado</span>' }[e]; };
   const orden = { bloqueado: 0, sin_senal: 1, autorizado: 2, activo: 3, ausente: 4 };
   $('#live').innerHTML = `<div class="kpis"><div class="kpi"><b>${n('activo')}</b><span>Participando</span></div><div class="kpi"><b style="color:var(--bad)">${n('bloqueado')}</b><span>Suspendidos</span></div><div class="kpi"><b>${A.filter(a => a.estado !== 'ausente').length}</b><span>Han ingresado</span></div><div class="kpi"><b>${A.reduce((x, a) => x + a.respuestas, 0)}</b><span>Respuestas</span></div></div>
@@ -96,6 +91,34 @@ async function refrescarVivo() {
 function chipSes(e) { return { abierta: '<span class="chip ok">abierta</span>', cerrada: '<span class="chip bad">cerrada</span>', proximamente: '<span class="chip warn">próximamente</span>', borrador: '<span class="chip">borrador</span>' }[e]; }
 async function autorizar(ruts) { try { const d = await API.call('docAutorizar', { sesion: T.sel, ruts }); toast(`Autorizados: ${d.autorizados}`); refrescarVivo(); } catch (e) { manejar(e); } }
 
+
+/* ---------- Envío de correos con PRUEBA ---------- */
+function modalEnvio({ titulo, cuerpo, onSend }) {
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box"><h3>${titulo}</h3>${cuerpo}<div id="mres"></div><div class="row" style="margin-top:14px"><button class="btn gold" id="mp">🧪 Enviar prueba a mi correo</button><button class="btn" id="mt">Enviar a todos</button><button class="btn ghost" id="mc">Cerrar</button></div><div class="hint">La prueba te llega solo a ti, con los datos de un estudiante real como ejemplo, para que veas cómo lo recibe. Recomendado antes de enviar a todos.</div></div>`;
+  document.body.appendChild(m);
+  const run = async prueba => {
+    if (!prueba && !confirm('¿Enviar a todos los estudiantes?')) return;
+    $$('.btn', m).forEach(b => b.disabled = true); $('#mres', m).innerHTML = '<p><span class="spin"></span> Enviando…</p>';
+    try { $('#mres', m).innerHTML = `<div class="fb ok" style="margin-top:12px">${await onSend(prueba, m)}</div>`; }
+    catch (e) { $('#mres', m).innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') { m.remove(); manejar(e); return; } }
+    $$('.btn', m).forEach(b => b.disabled = false);
+  };
+  $('#mp', m).onclick = () => run(true); $('#mt', m).onclick = () => run(false); $('#mc', m).onclick = () => m.remove();
+}
+async function lotes(accion, datos, tope = 30) {
+  let desde = 0, ok = 0, fallos = 0, ult = null;
+  for (let i = 0; i < tope; i++) { const d = await API.call(accion, { ...datos, desde }); ok += d.enviados; fallos += d.fallos; ult = d; desde = d.siguiente; if (!d.restantes) break; }
+  return { ok, fallos, ult };
+}
+function enviarEnlaceUI() {
+  const cur = String((T.cfg && T.cfg.cursos) || '').split(',').map(x => x.trim()).filter(Boolean);
+  modalEnvio({
+    titulo: '✉ Enviar enlace de acceso por correo',
+    cuerpo: `<p class="small mut">Los estudiantes reciben un correo con un botón para entrar a la plataforma (o directo a una sesión) y su RUT para ingresar. No necesitan el QR.</p><label>Curso</label><select id="mcur"><option value="">Todos los cursos</option>${cur.map(c => `<option>${esc(c)}</option>`).join('')}</select><label>Sesión</label><select id="mses"><option value="">Solo la plataforma</option>${T.sesiones.map(s => `<option value="${esc(s.id)}" ${s.id === T.sel ? 'selected' : ''}>Sesión ${s.numero} · ${esc(s.titulo)}</option>`).join('')}</select><label>Mensaje adicional (opcional)</label><textarea id="mmsg" style="min-height:70px" placeholder="Ej: Hoy trabajaremos en vivo, ten tu celular cargado."></textarea>`,
+    onSend: async (prueba, m) => { const r = await lotes('docEnviarEnlace', { curso: $('#mcur', m).value, sesion: $('#mses', m).value, mensaje: $('#mmsg', m).value, prueba }); return prueba ? `🧪 Prueba enviada a <b>${esc(r.ult.para)}</b> (ejemplo con los datos de «${esc(r.ult.ejemplo)}»). Revisa tu bandeja y spam.` : `✅ Enlaces enviados: ${r.ok}${r.fallos ? ` · fallos: ${r.fallos}` : ''}`; }
+  });
+}
 /* ---------- CONTROL REMOTO (pensado para el celular) ---------- */
 const ESACT = p => p && !['diapositiva', 'documento'].includes(p.tipo);
 const FASES = { diapositiva: 'Diapositiva', espera: 'Preparada', pregunta: 'Pregunta abierta', cerrada: 'Cerrada', resultados: 'Resultados', ranking: 'Ranking' };
@@ -113,26 +136,32 @@ function tilesDocente(p) {
 }
 async function vCtrl() {
   if (!T.sel) { $('#main').innerHTML = '<div class="card c mut">Crea una sesión primero.</div>'; return; }
-  $('#main').innerHTML = `<div class="card row"><div style="flex:1;min-width:180px">${selSesion()}</div><label class="row" style="margin:0;font-weight:700"><input type="checkbox" id="modo" style="width:22px;min-height:0;height:22px"> Modo en vivo</label><button class="btn sm gold" id="prj">🖥 Proyectar</button></div>
+  $('#main').innerHTML = `<div class="card row"><div style="flex:1;min-width:180px">${selSesion()}</div><label class="row" style="margin:0;font-weight:700"><input type="checkbox" id="modo" style="width:22px;min-height:0;height:22px"> Modo en vivo</label><button class="btn sm ghost" id="enl2">✉ Enlace</button><button class="btn sm gold" id="prj">🖥 Proyectar</button></div>
   <div class="hint" style="margin:-6px 4px 10px">Activa «Modo en vivo» para guiar la clase desde aquí: los estudiantes verán lo que tú habilites (diapositivas y preguntas con cronómetro, como Kahoot).</div>
   <div id="cv"><div class="c"><span class="spin"></span></div></div><div id="rbar"></div><div id="aipanel"></div>`;
   $('#sel').onchange = e => { T.sel = e.target.value; T.ckey = ''; T.ai = null; vCtrl(); };
   $('#modo').onchange = e => accionVivo({ ritmo: e.target.checked ? 'docente' : 'libre' });
-  $('#prj').onclick = proyectar; T.ckey = '';
+  $('#prj').onclick = proyectar; $('#enl2').onclick = () => enviarEnlaceUI(); T.ckey = '';
   refrescarCtrl(); T.timer = setInterval(refrescarCtrl, 2000);
   clearInterval(T.tick); T.tick = setInterval(() => { const c = T.cv; if (!c || c.v.fase !== 'pregunta') return; const left = c.v.t + c.v.dur * 1000 - (Date.now() + c.off); const n = $('#ctm'); if (n) n.textContent = Math.max(0, Math.ceil(left / 1000)) + ' s'; }, 250);
 }
-async function accionVivo(d) { try { await API.call('docVivoAccion', { sesion: T.sel, ...d }); await refrescarCtrl(true); } catch (e) { manejar(e); } }
+async function accionVivo(d) {
+  if (T.busy) return; T.busy = true; $$('.remote .btn').forEach(b => b.disabled = true);
+  const q = { ...d }; if (!q.ritmo && T.cv && T.cv.v.ritmo !== 'docente') q.ritmo = 'docente';   // al mover, se activa el modo en vivo solo
+  try { await API.call('docVivoAccion', { sesion: T.sel, ...q }); T.busy = false; await refrescarCtrl(true); }
+  catch (e) { T.busy = false; $$('.remote .btn').forEach(b => b.disabled = false); manejar(e); }
+}
 async function refrescarCtrl(forzar) {
-  if (!$('#cv') || document.hidden && !forzar) return;
+  if (!$('#cv') || (document.hidden && !forzar) || (T.busy && !forzar)) return;
   let c; try { c = await API.call('docVivo', { sesion: T.sel }); } catch (e) { return manejar(e); }
   c.off = c.v.ahora - Date.now(); T.cv = c; const v = c.v, p = c.paso;
   const modo = $('#modo'); if (modo && document.activeElement !== modo) modo.checked = v.ritmo === 'docente';
-  const act = ESACT(p); const resp = c.agregado ? c.agregado.n : 0;
-  let h = `<div class="card"><div class="row"><span class="chip navy">${c.paso ? c.paso.idx + 1 : 0} / ${c.n}</span><span class="chip ${v.ritmo === 'docente' ? 'ok' : ''}">${v.ritmo === 'docente' ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes} conectados</span>${v.fase === 'pregunta' ? '<b id="ctm" style="font:800 1.4rem Poppins"></b>' : ''}</div>`;
+  const act = ESACT(p); const resp = c.agregado ? c.agregado.n : 0; const enVivo = v.ritmo === 'docente';
+  let h = `<div class="card"><div class="row"><span class="chip navy">${c.paso ? c.paso.idx + 1 : 0} / ${c.n}</span><span class="chip ${enVivo ? 'ok' : ''}">${enVivo ? '🔴 En vivo' : 'Ritmo libre'}</span><span class="chip">${FASES[v.fase] || v.fase}</span><span class="sp"></span><span class="chip">👥 ${c.presentes} conectados</span>${enVivo ? `<span class="chip ${c.viendo >= c.presentes && c.presentes ? 'ok' : 'warn'}" title="Estudiantes que ya ven este mismo paso">👁 ${c.viendo} de ${c.presentes} ven este paso</span>` : ''}${v.fase === 'pregunta' ? '<b id="ctm" style="font:800 1.4rem Poppins"></b>' : ''}</div>`;
   if (p) {
-    h += `<h3 style="margin-top:12px">${esc(p.pregunta || p.titulo || '(sin título)')}</h3>`;
-    if (!act && p.texto) h += `<div class="small mut">${esc(p.texto.slice(0, 220))}${p.texto.length > 220 ? '…' : ''}</div>`;
+    if (!act && p.tipo === 'diapositiva') h += `<div style="margin-top:12px;max-width:460px" class="mini">${slideStage(p, false)}</div>`;
+    else h += `<h3 style="margin-top:12px">${esc(p.pregunta || p.titulo || '(sin título)')}</h3>`;
+    if (!act && p.tipo === 'documento') h += '<p class="mut small">Archivo o enlace incrustado.</p>';
     h += tilesDocente(p);
     if (act) h += `<div class="row" style="margin-top:10px"><span class="chip warn">✍️ ${resp} respondieron</span></div>`;
   }
@@ -140,15 +169,17 @@ async function refrescarCtrl(forzar) {
   if (act && c.agregado && v.fase !== 'espera') {
     h += `<div class="card"><h3>Resultados en vivo</h3>${p.tipo === 'abierta' ? `<p class="small mut">${resp} respuestas abiertas</p>${(c.agregado.textos || []).slice(-6).map(t => `<div class="fb neu small" style="margin:6px 0">${esc(t)}</div>`).join('')}` : aggHtml(p, c.agregado, p.correcta)}</div>`;
   }
-  if (v.fase === 'ranking' || (c.ranking.length && ['resultados', 'ranking'].includes(v.fase))) h += `<div class="card"><h3>🏆 Ranking (usuarios ficticios)</h3>${podioHtml(c.ranking, '')}</div>`;
-  $('#cv').innerHTML = h;
+  if (v.fase === 'ranking' || (c.ranking.length && ['resultados', 'ranking'].includes(v.fase))) h += `<div class="card"><h3>🏆 Ranking</h3>${podioHtml(c.ranking, '')}</div>`;
+  $('#cv').innerHTML = h + '<div class="remote-pad"></div>';
   const key = [v.paso, v.fase, v.ritmo].join('|');
   if (key !== T.ckey || forzar) {
-    T.ckey = key; const m = accionPrincipal(c); const live = v.ritmo === 'docente'; if ($('#aires')) $('#aires').innerHTML = '';
-    $('#rbar').innerHTML = live ? `<div class="remote"><button class="btn ghost" id="rp">◀</button><button class="btn ${v.fase === 'pregunta' ? 'red' : 'gold'}" id="rm">${m.t}</button><button class="btn ghost" id="rn">▶</button></div>
-      <div class="row" style="margin:10px 0"><select id="rj" style="flex:1">${c.pasos.map(q => `<option value="${q.i}" ${q.i === v.paso ? 'selected' : ''}>${q.i + 1}. ${esc((q.titulo || '').slice(0, 45))} · ${q.tipo}</option>`).join('')}</select><button class="btn sm ghost" id="rt">Ir</button></div>`
-      : '<div class="info">El modo en vivo está apagado: los estudiantes avanzan a su ritmo. Actívalo arriba para guiar la clase.</div>';
-    if (live) { $('#rp').onclick = () => accionVivo({ op: 'anterior' }); $('#rn').onclick = () => accionVivo({ op: 'siguiente' }); $('#rm').onclick = () => accionVivo({ op: m.a }); $('#rt').onclick = () => accionVivo({ op: 'ir', paso: +$('#rj').value }); }
+    T.ckey = key; const m = accionPrincipal(c); if ($('#aires')) $('#aires').innerHTML = '';
+    $('#rbar').innerHTML = `<div class="row" style="margin:6px 0"><select id="rj" style="flex:1">${c.pasos.map(q => `<option value="${q.i}" ${q.i === v.paso ? 'selected' : ''}>${q.i + 1}. ${esc((q.titulo || '').slice(0, 45))} · ${q.tipo}</option>`).join('')}</select><button class="btn sm ghost" id="rt">Ir</button></div>
+      ${enVivo ? '' : '<div class="info">Ritmo libre: los estudiantes avanzan solos. Al pulsar cualquier botón se activa el modo en vivo.</div>'}
+      <div class="remote"><button class="btn ghost" id="rp" aria-label="Paso anterior">◀</button><button class="btn ${v.fase === 'pregunta' ? 'red' : 'gold'}" id="rm">${enVivo ? m.t : '▶ Iniciar clase en vivo'}</button><button class="btn ghost" id="rn" aria-label="Paso siguiente">▶</button></div>`;
+    $('#rp').onclick = () => accionVivo({ op: 'anterior' }); $('#rn').onclick = () => accionVivo({ op: 'siguiente' });
+    $('#rm').onclick = () => accionVivo(enVivo ? { op: m.a } : { ritmo: 'docente', op: 'ir', paso: v.paso });
+    $('#rt').onclick = () => accionVivo({ op: 'ir', paso: +$('#rj').value });
     if (!$('#aibtns')) $('#aipanel').innerHTML = `<div class="card" id="aibtns"><h3>🤖 Análisis inmediato con IA</h3><p class="small mut">Resume cómo le fue al curso <b>sin nombrar a nadie</b> y te sugiere una retroalimentación general que puedes proyectar o enviar a las pantallas de los estudiantes.</p><div class="row"><button class="btn sm" id="a1">Analizar esta pregunta</button><button class="btn sm ghost" id="a2">Analizar toda la sesión</button><button class="btn sm gold" id="a3">⚡ Corregir abiertas y devolver feedback individual</button></div><div id="aires"></div></div>`;
     $('#a1').onclick = () => analizar('paso'); $('#a2').onclick = () => analizar('sesion'); $('#a3').onclick = corregirAhora;
   }
@@ -188,8 +219,8 @@ function proyectar() {
     else if (v.fase === 'espera') cuerpo = `<h1>${esc(p.pregunta)}</h1>${tilesDocente({ ...p, correcta: -1 })}<p class="mut">Prepárate…</p>`;
     else if (v.fase === 'pregunta') cuerpo = `<div class="row"><h1 class="sp">${esc(p.pregunta)}</h1><b id="ptm" style="font:800 4rem Poppins;color:#ffd23f"></b></div>${tilesDocente({ ...p, correcta: -1 })}<p style="font-size:1.4rem">✍️ ${c.agregado ? c.agregado.n : 0} / ${c.presentes} respondieron</p>`;
     else cuerpo = `<h1>${esc(p.pregunta)}</h1><div style="background:var(--card);color:var(--ink);border-radius:20px;padding:16px">${p.tipo === 'abierta' ? `<p>${c.agregado.n} respuestas</p>` : aggHtml(p, c.agregado, p.correcta)}</div>${v.retro ? `<div class="card retro" style="color:var(--ink);margin-top:14px"><b>🧑‍🏫 Retroalimentación</b><p style="font-size:1.2rem">${md(v.retro)}</p></div>` : ''}`;
-    w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip">👥 ${c.presentes}</span><button class="btn sm ghost" id="pcl" style="color:#fff;border-color:#fff8">Cerrar (Esc)</button></div>${cuerpo}<div class="row" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div></div>`;
-    $('#pcl').onclick = cerrar; new QRCode($('#pqr'), { text: base, width: 96, height: 96, correctLevel: QRCode.CorrectLevel.M });
+    w.innerHTML = `<div class="in"><div class="row" style="margin-bottom:14px"><img src="img/insignia.png" width="56" alt=""><b class="sp" style="font:700 1rem Poppins">Colegio Marina de Chile · Sesión ${c.numero}: ${esc(c.titulo)}</b><span class="chip">👥 ${c.presentes}</span><button class="btn sm ghost" id="pcl" style="color:#fff;border-color:#fff8">Cerrar (Esc)</button></div>${cuerpo}${v.paso === 0 && v.fase !== 'pregunta' ? '<div class="row qrbox" style="margin-top:20px"><div class="qr" style="padding:6px"><div id="pqr"></div></div><span class="mut">Escanea para unirte · Ingresa con tu RUT</span></div>' : ''}</div>`;
+    $('#pcl').onclick = cerrar; if ($('#pqr')) new QRCode($('#pqr'), { text: base, width: 140, height: 140, correctLevel: QRCode.CorrectLevel.M });
   };
   w._k = setInterval(() => { const c = w._c; if (!c || c.v.fase !== 'pregunta') return; const n = $('#ptm'); if (n) n.textContent = Math.max(0, Math.ceil((c.v.t + c.v.dur * 1000 - (Date.now() + c.off)) / 1000)); }, 250);
   pintar(); w._t = setInterval(pintar, 2000);
@@ -221,12 +252,10 @@ async function vCorr(paso) {
   $('#main').innerHTML = `<div class="card"><div class="row">${selSesion()}<button class="btn sm gold" id="mailall">✉ Enviar copias por correo</button><select id="pp" style="max-width:520px">${P.map(x => `<option value="${esc(x.id)}" ${x.id === paso ? 'selected' : ''}>${esc((x.titulo || x.pregunta).slice(0, 70))} (${x.tipo})</option>`).join('')}</select></div>
   ${p.tipo === 'abierta' ? `<div class="hint" style="margin-top:8px"><b>Pauta:</b> ${esc(p.modelo || '—')}</div><div class="row" style="margin-top:10px"><button class="btn" id="ia" ${pend ? '' : 'disabled'}>🤖 Corregir con IA (${pend} pendientes)</button><button class="btn gold" id="ap" ${ia ? '' : 'disabled'}>✔ Aprobar sugerencias de IA (${ia})</button></div><div id="iam"></div>` : ''}</div>${detalle}`;
   $('#sel').onchange = e => { T.sel = e.target.value; T.pasoCorr = null; vCorr(); }; $('#pp').onchange = e => vCorr(e.target.value);
-  $('#mailall').onclick = async ev => {
-    if (!confirm('Se enviará a cada estudiante que respondió, desde tu correo, un comprobante formal con sus respuestas, puntajes y retroalimentación disponibles. ¿Continuar?')) return;
-    const b = ev.target; b.disabled = true; b.textContent = 'Enviando…';
-    try { const d = await API.call('docEnviarCopias', { sesion: T.sel }); alert(`Correos enviados: ${d.enviados}\nSin correo registrado: ${d.sinCorreo.length ? d.sinCorreo.join(', ') : 'ninguno'}\nFallos: ${d.fallos}\nCuota diaria restante: ${d.cuotaRestante}`); } catch (e) { manejar(e); }
-    b.disabled = false; b.textContent = '✉ Enviar copias por correo';
-  };
+  $('#mailall').onclick = () => modalEnvio({
+    titulo: '✉ Enviar copias de la sesión', cuerpo: '<p class="small mut">Cada estudiante que respondió recibe, desde tu correo, un comprobante formal con sus respuestas, puntajes y retroalimentación disponibles.</p>',
+    onSend: async prueba => { const d = await API.call('docEnviarCopias', { sesion: T.sel, prueba }); return prueba ? `🧪 Prueba enviada a <b>${esc(d.para)}</b> (ejemplo con los datos de «${esc(d.ejemplo)}»). Revisa tu bandeja y spam.` : `✅ Correos enviados: ${d.enviados}${d.sinCorreo.length ? `<br>Sin correo registrado: ${esc(d.sinCorreo.join(', '))}` : ''}${d.fallos ? `<br>Fallos: ${d.fallos}` : ''}<br>Cuota diaria restante: ${d.cuotaRestante}`; }
+  });
   if (p.tipo === 'abierta') {
     $('#ia').onclick = async () => {
       const b = $('#ia'); b.disabled = true; let tot = 0;
@@ -265,10 +294,10 @@ async function vEst() {
     <label>Correo institucional</label><input id="em" type="email" placeholder="rut@andaliensur.cl"><div class="hint">Si lo dejas vacío no recibirá copias por correo.</div>
     <div id="em1"></div><button class="btn block" id="eg" style="margin-top:12px">Guardar estudiante</button></div>
   <div class="card"><h3>Importar lista</h3><p class="small mut">Copia las filas desde Excel/Sheets (Correos · Curso · Nombre Alumno · Electivo) y pégalas aquí. El RUT se toma del correo. Si el RUT ya existe, se actualizan nombre y curso.</p><textarea id="ei" style="min-height:130px" placeholder="23211642-0@andaliensur.cl&#9;3° Medio A&#9;Sepulveda Castro, Ezequiel Camilo&#9;Economía y Sociedad"></textarea><div id="eim"></div><button class="btn block gold" id="eb" style="margin-top:10px">Importar</button></div></div>
-  <div class="card"><h3>Cursos</h3><div class="row">${D.cursos.map(c => `<span class="chip navy" style="font-size:.85rem">${esc(c)} <a href="#" data-rn="${esc(c)}" style="color:#fff;text-decoration:none" title="Renombrar">✎</a></span>`).join('')}</div><div class="hint">Un curso nuevo se crea al asignárselo a un estudiante. ✎ renombra el curso para todos sus estudiantes.</div></div>
+  <div class="card"><div class="row"><h3 class="sp" style="margin:0">Cursos</h3><button class="btn sm" id="enl3">✉ Enviar enlace por correo</button></div><div class="row" style="margin-top:8px">${D.cursos.map(c => `<span class="chip navy" style="font-size:.85rem">${esc(c)} <a href="#" data-rn="${esc(c)}" style="color:#fff;text-decoration:none" title="Renombrar">✎</a> <a href="#" data-dc="${esc(c)}" style="color:#fff;text-decoration:none" title="Eliminar curso">✕</a></span>`).join('')}</div><div class="hint">Un curso nuevo se crea al asignárselo a un estudiante. ✎ renombra el curso para todos sus estudiantes.</div></div>
   <div class="card row"><select id="ef" style="max-width:220px"><option value="">Todos los cursos (${D.estudiantes.length})</option>${D.cursos.map(c => `<option ${c === fc ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><span class="sp small mut">${lista.length} estudiantes</span></div>
-  <div class="scroll"><table class="t"><tr><th>Estudiante</th><th>RUT</th><th>Usuario ficticio</th><th>Curso</th><th>Correo</th><th>Último ingreso</th><th></th></tr>
-  ${lista.map(e => `<tr><td><b>${esc(e.nombre)}</b></td><td>${esc(e.rut)}</td><td><span class="chip navy">${esc(e.alias)}</span> <a href="#" data-al="${esc(e.rut)}" title="Cambiar usuario ficticio">🔄</a></td><td>${esc(e.curso)}</td><td class="small">${esc(e.correo) || '<span class="chip warn">sin correo</span>'}</td><td class="small">${e.ultimo ? fmtFecha(e.ultimo, true) : '—'}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-ed="${esc(e.rut)}">Editar</button> <button class="btn sm ghost" data-del="${esc(e.rut)}">🗑</button></td></tr>`).join('') || '<tr><td colspan="6" class="c mut">Sin estudiantes. Importa tu lista o agrega uno.</td></tr>'}</table></div>`;
+  <div class="scroll"><table class="t"><tr><th>Estudiante</th><th>RUT</th><th>Curso</th><th>Correo</th><th>Último ingreso</th><th></th></tr>
+  ${lista.map(e => `<tr><td><b>${esc(e.nombre)}</b></td><td>${esc(e.rut)}</td><td>${esc(e.curso)}</td><td class="small">${esc(e.correo) || '<span class="chip warn">sin correo</span>'}</td><td class="small">${e.ultimo ? fmtFecha(e.ultimo, true) : '—'}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-ed="${esc(e.rut)}">Editar</button> <button class="btn sm ghost" data-del="${esc(e.rut)}">🗑</button></td></tr>`).join('') || '<tr><td colspan="6" class="c mut">Sin estudiantes. Importa tu lista o agrega uno.</td></tr>'}</table></div>`;
   $('#er').oninput = e => { e.target.value = formatRut(e.target.value); };
   $('#ef').onchange = e => { T.cursoE = e.target.value; vEst(); };
   $('#eg').onclick = async () => { try { await API.call('docGuardarEstudiante', { estudiante: { rut: $('#er').value, nombre: $('#en').value, curso: $('#ec').value, correo: $('#em').value } }); toast('Estudiante guardado ✅'); vEst(); } catch (e) { $('#em1').innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') manejar(e); } };
@@ -278,7 +307,17 @@ async function vEst() {
     catch (e) { manejar(e); } b.disabled = false; b.textContent = 'Importar';
   };
   $$('[data-ed]').forEach(b => b.onclick = () => { const e = D.estudiantes.find(x => x.rut === b.dataset.ed); $('#er').value = e.rut; $('#en').value = e.nombre; $('#ec').value = e.curso; $('#em').value = e.correo; $('#ft').scrollIntoView({ behavior: 'smooth' }); });
-  $$('[data-al]').forEach(a => a.onclick = async ev => { ev.preventDefault(); try { const d = await API.call('docRegenerarAlias', { rut: a.dataset.al }); toast('Nuevo usuario: ' + d.alias); vEst(); } catch (e) { manejar(e); } });
+
+  $('#enl3').onclick = () => enviarEnlaceUI();
+  $$('[data-dc]').forEach(a => a.onclick = async ev => {
+    ev.preventDefault(); const cu = a.dataset.dc; const k = D.estudiantes.filter(x => x.curso === cu).length; let destino = '';
+    if (k) {
+      const otros = D.cursos.filter(x => x !== cu); const r = prompt(`El curso «${cu}» tiene ${k} estudiante(s).\n\nEscribe el nombre del curso al que quieres moverlos${otros.length ? ' (' + otros.join(', ') + ')' : ''},\no escribe ELIMINAR para quitarlos de la asignatura.`);
+      if (r === null || !r.trim()) return; destino = r.trim().toUpperCase() === 'ELIMINAR' ? '__eliminar__' : r.trim();
+      if (destino === '__eliminar__' && !confirm(`Se quitarán ${k} estudiantes de la asignatura (sus respuestas quedan en la planilla). ¿Seguro?`)) return;
+    } else if (!confirm(`¿Eliminar el curso «${cu}»?`)) return;
+    try { const d = await API.call('docEliminarCurso', { curso: cu, destino }); toast('Curso eliminado (' + d.accion_realizada + ')'); vEst(); } catch (e) { manejar(e); }
+  });
   $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('¿Quitar a este estudiante de la asignatura? Sus respuestas quedan en la planilla.')) return; try { await API.call('docEliminarEstudiante', { rut: b.dataset.del }); vEst(); } catch (e) { manejar(e); } });
   $$('[data-rn]').forEach(a => a.onclick = async ev => { ev.preventDefault(); const n = prompt('Nuevo nombre para el curso «' + a.dataset.rn + '»:', a.dataset.rn); if (!n || n === a.dataset.rn) return; try { const d = await API.call('docRenombrarCurso', { de: a.dataset.rn, a: n }); toast(`Curso renombrado (${d.estudiantes} estudiantes)`); vEst(); } catch (e) { manejar(e); } });
 }
@@ -298,7 +337,7 @@ function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${eti
 function pasoForm(p, i) {
   let f = '';
   if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
-  else if (p.tipo === 'diapositiva') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Contenido (**negrita**, *cursiva*)', p.texto, 'area') + campo('imagen', 'URL de imagen (opcional)', p.imagen);
+  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><div class="imgpanel"></div></div>`;
   else {
     f = (p.tipo === 'abierta' ? campo('titulo', 'Título corto', p.titulo) : '') + campo('pregunta', 'Pregunta', p.pregunta, 'area');
     if (p.tipo === 'opcion' || p.tipo === 'encuesta') f += campo('opciones', 'Opciones (una por línea)', (p.opciones || []).join('\n'), 'area');
@@ -313,10 +352,10 @@ function pasoForm(p, i) {
 }
 function leerPasos() {
   return $$('#pasos .paso-ed').map(c => {
-    const g = k => { const e = $(`[data-k="${k}"]`, c); return e ? e.value : undefined; };
+    const g = k => { const e = $(`[data-k="${k}"]`, c); if (!e) return undefined; return e.value !== undefined ? e.value : e.innerText.replace(/ /g, ' ').replace(/\n+$/, ''); };
     const p = { id: T.edit.pasos[+c.dataset.i]?.id || 'n' + Math.random().toString(36).slice(2, 7), tipo: g('tipo') };
     if (p.tipo === 'documento') { p.titulo = g('titulo'); p.texto = g('texto'); p.url = g('url'); p.driveId = g('driveId'); p.mime = g('mime'); return p; }
-    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); return p; }
+    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); return p; }
     p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1; if (+g('tiempo')) p.tiempo = +g('tiempo');
     if (g('titulo') !== undefined) p.titulo = g('titulo');
     if (p.tipo === 'opcion' || p.tipo === 'encuesta') p.opciones = g('opciones').split('\n').map(x => x.trim()).filter(Boolean);
@@ -383,7 +422,22 @@ function editor() {
   }
   function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
   $('#pasos').onchange = ev => { if (ev.target.dataset.k === 'tipo') { const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); ps[i] = { id: ps[i].id, tipo: ps[i].tipo, titulo: ps[i].titulo, texto: ps[i].texto, pregunta: ps[i].pregunta, puntos: ps[i].puntos || 1, opciones: ['', '', '', ''], correcta: ps[i].tipo === 'vf' ? 'V' : 0, campos: ['Tu respuesta'] }; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); } };
-  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
+  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || a === 'img' || a === 'noimg') return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
+  const rerender = () => { e.pasos = leerPasos(); e.material = leerMat(); copiarCab(); const sc = scrollY; editor(); scrollTo(0, sc); };
+  $('#pasos').addEventListener('change', ev => { const k = ev.target.dataset.k; if (k === 'layout' || k === 'tema') rerender(); });
+  $('#pasos').addEventListener('click', ev => {
+    const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg') return;
+    const ed = ev.target.closest('.edslide'); const set = (src, cred) => { $('[data-k="imagen"]', ed).value = src; $('[data-k="credito"]', ed).value = cred || ''; rerender(); };
+    if (a === 'noimg') return set('', '');
+    const panel = $('.imgpanel', ed); const titulo = ($('[data-k="titulo"]', ed).innerText || '').trim();
+    panel.innerHTML = `<div class="card" style="margin-top:8px"><div class="row"><input class="iq" placeholder="Buscar imágenes en internet… (ej: puerto de Valparaíso)" value="${esc(titulo)}" style="flex:1;min-width:180px"><button class="btn sm iqb">🔍 Buscar</button></div><div class="row" style="margin-top:6px"><input class="iu" placeholder="…o pega la dirección (URL) de una imagen" style="flex:1;min-width:180px"><button class="btn sm ghost iub">Usar URL</button><button class="btn sm ghost iup">⬆ Subir</button><input type="file" class="iuf" accept="image/*" hidden></div><div class="imgres"></div><div class="hint">Resultados de Wikimedia Commons y Openverse (licencias libres). El crédito del autor queda en la diapositiva.</div></div>`;
+    const res = $('.imgres', panel);
+    const buscar = async () => { const q = $('.iq', panel).value.trim(); if (!q) return; res.innerHTML = '<span class="spin"></span>'; const r = await buscarImagenes(q); res.innerHTML = r.length ? r.map((x, i) => `<button data-i="${i}" title="${esc(x.credito)}"><img src="${esc(x.thumb)}" loading="lazy" alt="" onerror="this.parentNode.remove()"></button>`).join('') : '<p class="mut small">Sin resultados. Prueba otras palabras (en inglés suele dar más).</p>'; res.onclick = ev2 => { const b = ev2.target.closest('button'); if (b) set(r[+b.dataset.i].src, r[+b.dataset.i].credito); }; };
+    $('.iqb', panel).onclick = buscar; $('.iq', panel).onkeydown = ev2 => { if (ev2.key === 'Enter') buscar(); }; buscar();
+    $('.iub', panel).onclick = () => { const u = $('.iu', panel).value.trim(); if (!/^https:\/\//i.test(u)) return toast('Pega una dirección que empiece con https://'); set(u, ''); };
+    $('.iup', panel).onclick = () => $('.iuf', panel).click();
+    $('.iuf', panel).onchange = async ev2 => { const f = ev2.target.files[0]; if (!f) return; res.innerHTML = '<span class="spin"></span> Subiendo…'; try { const r = await subirArchivo(f, () => { }); set('https://drive.google.com/thumbnail?id=' + r.id + '&sz=w1600', ''); } catch (er) { res.innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
+  });
   $('#mats').onclick = ev => { if (ev.target.dataset.rm !== undefined) { const m = leerMat(); m.splice(+ev.target.dataset.rm, 1); e.pasos = leerPasos(); e.material = m; copiarCab(); editor(); } };
   $('#sv').onclick = async () => {
     copiarCab(); e.pasos = leerPasos(); e.material = leerMat();
@@ -395,7 +449,7 @@ const ICONO = { diapositiva: '🖼', documento: '📎', opcion: '🔺', vf: '✔
 function nuevoPaso(t) {
   const id = 'n' + Math.random().toString(36).slice(2, 7);
   return ({
-    diapositiva: { id, tipo: t, titulo: '', texto: '' }, documento: { id, tipo: t, titulo: '', url: '' },
+    diapositiva: { id, tipo: t, titulo: '', texto: '', layout: 'solo', tema: 'azul' }, documento: { id, tipo: t, titulo: '', url: '' },
     opcion: { id, tipo: t, pregunta: '', opciones: ['', '', '', ''], correcta: 0, puntos: 1 }, vf: { id, tipo: t, pregunta: '', correcta: 'V', puntos: 1 },
     numerica: { id, tipo: t, pregunta: '', correcta: 0, tolerancia: 0.01, puntos: 2 }, encuesta: { id, tipo: t, pregunta: '', opciones: ['', '', ''], puntos: 1 },
     nube: { id, tipo: t, pregunta: '', puntos: 1 }, escala: { id, tipo: t, pregunta: '', puntos: 1 }, abierta: { id, tipo: t, pregunta: '', campos: ['Tu respuesta'], puntos: 3 }
@@ -448,6 +502,7 @@ function montarIA(e, agregar) {
   <label>…o pega texto aquí (opcional)</label><textarea id="iax" style="min-height:70px"></textarea>
   <button class="btn block" id="iag" style="margin-top:12px">✨ Generar preguntas</button><div id="iar"></div></div>`;
   let textoDoc = '';
+  montarClaseIA(e, agregar, () => ({ tema: $('#iat').value || e.titulo, texto: ($('#iax').value + '\n' + textoDoc).trim(), tipos: $$('.iatp').filter(x => x.checked).map(x => x.value), nivel: $('#iad').value }));
   $('#iaf').onchange = async ev => {
     const f = ev.target.files[0]; if (!f) return; $('#iafs').textContent = 'Leyendo documento…';
     try { textoDoc = await extraerTexto(f); $('#iafs').textContent = textoDoc.trim() ? `✅ Texto leído (${textoDoc.length.toLocaleString('es-CL')} caracteres; se usan los primeros ~12.000).` : '⚠️ No se encontró texto (¿es un PDF escaneado/imagen?).'; }
@@ -465,6 +520,29 @@ function montarIA(e, agregar) {
     b.disabled = false; b.textContent = '✨ Generar preguntas';
   };
 }
+/** Genera una clase completa: diapositivas atractivas con imágenes sugeridas + actividades intercaladas */
+function montarClaseIA(e, agregar, getCtx) {
+  const box = $('#iaq'); if (!box) return;
+  box.insertAdjacentHTML('beforeend', `<div class="card"><h3>🎨 Generar una clase completa</h3><p class="small mut">Crea una presentación atractiva (portada, viñetas, ideas destacadas e imágenes acordes) con actividades intercaladas, usando el tema, la sesión y el documento de arriba. Después puedes editar todo directamente sobre las diapositivas.</p>
+  <div class="grid2"><div><label>Diapositivas</label><input id="ids" type="number" min="3" max="14" value="8"></div><div><label class="row" style="margin:20px 0 0;font-weight:500"><input type="checkbox" id="ida" checked style="width:20px;min-height:0;height:20px"> Intercalar actividades</label><label class="row" style="margin:6px 0 0;font-weight:500"><input type="checkbox" id="idi" checked style="width:20px;min-height:0;height:20px"> Buscar imágenes automáticamente</label></div></div>
+  <button class="btn gold block" id="idg" style="margin-top:12px">🎨 Generar clase</button><div id="idr"></div></div>`);
+  $('#idg').onclick = async () => {
+    const b = $('#idg'), out = $('#idr'); b.disabled = true; b.textContent = 'Diseñando la clase…'; out.innerHTML = '';
+    try {
+      const c = getCtx(); const d = await API.call('docGenerarClaseIA', { sesion: e.id || '', tema: c.tema, texto: c.texto, tipos: c.tipos, nivel: c.nivel, diapos: +$('#ids').value, actividades: $('#ida').checked });
+      const pasos = d.pasos;
+      if ($('#idi').checked) {
+        const con = pasos.filter(p => p.imagen_q); let i = 0, hechas = 0; out.innerHTML = `<p><span class="spin"></span> Buscando imágenes… 0/${con.length}</p>`;
+        const worker = async () => { while (i < con.length) { const p = con[i++]; try { const r = await buscarImagenes(p.imagen_q); if (r[0]) { p.imagen = r[0].src; p.credito = r[0].credito; } } catch (er) { } hechas++; out.innerHTML = `<p><span class="spin"></span> Buscando imágenes… ${hechas}/${con.length}</p>`; } };
+        await Promise.all([worker(), worker(), worker()]);
+      }
+      pasos.forEach(p => { delete p.imagen_q; if (p.tipo !== 'diapositiva') return; if (!p.imagen && ['imagen-derecha', 'imagen-izquierda', 'fondo'].includes(p.layout)) p.layout = 'solo'; if (p.imagen && p.layout === 'solo') p.layout = 'imagen-derecha'; });
+      out.innerHTML = `<h3 style="margin-top:14px">Vista previa (${pasos.length} pasos)</h3>` + pasos.map((p, i) => `<label class="paso-ed" style="display:block;cursor:pointer"><input type="checkbox" class="idsel" data-i="${i}" checked style="width:20px;min-height:0;height:20px;vertical-align:middle"> <span class="chip ${p.tipo === 'diapositiva' ? 'navy' : 'warn'}">${ICONO[p.tipo] || ''} ${i + 1} · ${p.tipo === 'diapositiva' ? 'Diapositiva' : TIPOS[p.tipo] || p.tipo}</span>${p.tipo === 'diapositiva' ? `<div class="mini" style="max-width:380px;margin-top:8px">${slideStage(p, false)}</div>` : `<div class="small" style="margin-top:6px"><b>${esc(p.pregunta)}</b></div>`}</label>`).join('') + '<button class="btn gold block" id="idadd">➕ Agregar la clase seleccionada</button>';
+      $('#idadd').onclick = () => { const sel = $$('.idsel').filter(x => x.checked).map(x => pasos[+x.dataset.i]); if (!sel.length) return toast('Selecciona al menos un paso.'); agregar(sel); };
+    } catch (er) { out.innerHTML = `<div class="err">${esc(er.message)}</div>`; if (er.code === 'SESION_EXPIRADA') manejar(er); }
+    b.disabled = false; b.textContent = '🎨 Generar clase';
+  };
+}
 function matForm(m, i) { return `<div class="paso-ed mat" data-did="${esc(m.driveId || '')}" data-mime="${esc(m.mime || '')}">${m.driveId ? '<span class="chip ok">📎 Archivo subido a tu Drive</span>' : ''}<div class="row"><select class="mt" style="max-width:160px">${['video', 'documento', 'enlace'].map(t => `<option ${m.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select><input class="mti" placeholder="Título" value="${esc(m.titulo)}" style="flex:1;min-width:160px"><button class="btn sm ghost" data-rm="${i}">✕</button></div><input class="mu" placeholder="URL (YouTube, Drive, PDF en el repositorio…)" value="${esc(m.url)}" style="margin-top:8px"><input class="md" placeholder="Descripción (opcional)" value="${esc(m.descripcion || '')}" style="margin-top:8px"></div>`; }
 
 /* ---------- INFORMES ---------- */
@@ -478,12 +556,10 @@ async function vInf() {
   $('#cf').onchange = e => { T.cursoF = e.target.value; vInf(); };
   const gen = async (b, datos) => { const t = b.textContent; b.disabled = true; b.textContent = '…'; try { const d = await API.call('docInforme', datos); descargarBase64(d.nombre, d.base64); toast('Informe generado ✅'); } catch (e) { manejar(e); } b.disabled = false; b.textContent = t; };
   $('#pc').onclick = e => gen(e.target, { curso: T.cursoF });
-  $('#pm').onclick = async ev => {
-    if (!confirm(`Se enviará desde tu correo el informe PDF a cada estudiante de «${T.cursoF || 'todos los cursos'}» que tenga correo registrado. ¿Continuar?`)) return;
-    const b = ev.target; b.disabled = true; let desde = 0, ok = 0, fallos = 0;
-    try { for (let i = 0; i < 20; i++) { b.textContent = `Enviando… (${ok})`; const d = await API.call('docEnviarInformes', { curso: T.cursoF || '', desde, maximo: 12 }); ok += d.enviados; fallos += d.fallos; desde = d.siguiente; if (!d.restantes) break; } alert(`Informes enviados: ${ok}\nFallos: ${fallos}`); } catch (e) { manejar(e); }
-    b.disabled = false; b.textContent = `✉ Enviar informe por correo (${T.cursoF || 'todos'})`;
-  };
+  $('#pm').onclick = () => modalEnvio({
+    titulo: '✉ Enviar informe por correo', cuerpo: `<p class="small mut">Se envía el informe PDF formal a cada estudiante de «${esc(T.cursoF || 'todos los cursos')}» que tenga correo registrado.</p>`,
+    onSend: async prueba => { const r = await lotes('docEnviarInformes', { curso: T.cursoF || '', prueba, maximo: 12 }); return prueba ? `🧪 Prueba enviada a <b>${esc(r.ult.para)}</b> con el informe de «${esc(r.ult.ejemplo)}» como ejemplo. Revisa tu bandeja y spam.` : `✅ Informes enviados: ${r.ok}${r.fallos ? ` · fallos: ${r.fallos}` : ''}`; }
+  });
   $$('.pdf').forEach(b => b.onclick = async () => { const tr = b.closest('tr'); try { await API.call('docGuardarObs', { rut: tr.dataset.rut, observacion: $('.ob', tr).value }); } catch (e) { return manejar(e); } gen(b, { ruts: [tr.dataset.rut] }); });
   $$('.ob').forEach(t => t.onchange = () => API.call('docGuardarObs', { rut: t.closest('tr').dataset.rut, observacion: t.value }).then(() => toast('Observación guardada')).catch(manejar));
 }
@@ -495,7 +571,7 @@ function vCfg() {
   $('#main').innerHTML = `<div class="card"><h3>Ajustes generales</h3>${f('colegio', 'Establecimiento')}${f('asignatura', 'Asignatura')}${f('nombre_unidad', 'Nombre de la unidad')}${f('docente', 'Nombre del docente (aparece en informes)')}${f('total_sesiones', 'Total de sesiones planificadas', 'Se usa para calcular el progreso. Puedes cambiarlo cuando quieras (14 por defecto).')}${f('cursos', 'Cursos (separados por coma)', 'Aparecen como opciones al inscribirse.')}${f('exigencia', '% de exigencia para la nota 4,0')}${f('logo_url', 'URL del logo para los informes (opcional)')}
   <label>¿Los estudiantes pueden descargar su informe?</label><select data-c="informe_visible"><option value="NO" ${c.informe_visible !== 'SI' ? 'selected' : ''}>No (solo yo)</option><option value="SI" ${c.informe_visible === 'SI' ? 'selected' : ''}>Sí</option></select>
   <label>Enviar copia por correo al estudiante cuando termina de participar</label><select data-c="correo_auto"><option value="SI" ${c.correo_auto !== 'NO' ? 'selected' : ''}>Sí, automáticamente</option><option value="NO" ${c.correo_auto === 'NO' ? 'selected' : ''}>No (solo cuando yo la envíe)</option></select><div class="hint">Los correos salen desde tu cuenta de Google. Cuenta personal: ~100 por día; Google Workspace: ~1.500.</div>
-  ${f('modelo_ia', 'Modelo de IA (Groq)', 'Estado de la clave de IA: ' + (c.tiene_ia ? '✅ configurada' : '❌ falta GROQ_API_KEY en las propiedades del script'))}
+  ${f('url_app', 'Dirección (URL) de la plataforma para los estudiantes', 'Es el enlace que llevan los correos. Ej: https://leandrobascunan-code.github.io/econom-a/')}${f('modelo_ia', 'Modelo de IA (Groq)', 'Estado de la clave de IA: ' + (c.tiene_ia ? '✅ configurada' : '❌ falta GROQ_API_KEY en las propiedades del script'))}
   <button class="btn block" id="gc" style="margin-top:14px">Guardar ajustes</button></div>
   <div class="card"><h3>Datos</h3><p class="small mut">Toda la información (estudiantes, asistencia, respuestas y eventos de salida/reingreso) queda en tu planilla de Google.</p><a class="btn ghost" target="_blank" rel="noopener" href="${esc(T.planilla || '#')}">Abrir planilla de datos</a></div>`;
   $('#gc').onclick = async () => { const o = {}; $$('[data-c]').forEach(e => o[e.dataset.c] = e.value); try { await API.call('docGuardarConfig', { config: o }); T.cfg = { ...T.cfg, ...o }; toast('Ajustes guardados ✅'); } catch (e) { manejar(e); } };

@@ -57,7 +57,7 @@ async function inicio() {
   const p = S.progreso;
   const ring = `<div class="row" style="margin-top:18px;gap:16px"><div class="ring" style="--p:${p.pct_avance}"><b>${p.pct_avance}%</b></div><div class="sp"><div style="font:600 1rem Poppins">Tu progreso en la unidad</div><div class="small" style="opacity:.85">${p.completadas} de ${p.total} sesiones completadas</div></div></div>
   <div class="stats"><div><b>${p.pct_logro}%</b>Logro</div><div><b>${p.nota === null ? '—' : String(p.nota).replace('.', ',')}</b>Nota ref.</div><div><b style="font-size:.95rem;padding-top:3px">${esc(p.nivel)}</b>Nivel</div></div>`;
-  App.innerHTML = `${hero('Hola, ' + esc(S.perfil.nombre.split(' ')[0]) + ' 👋', esc(S.perfil.curso) + ' · <span class="alias">🎮 Tu usuario: ' + esc(S.perfil.alias || '—') + '</span>', ring)}
+  App.innerHTML = `${hero('Hola, ' + esc(S.perfil.nombre.split(' ')[0]) + ' 👋', esc(S.perfil.curso) + ' · <span class="alias">👤 ' + esc(S.perfil.nombre || '—') + '</span>', ring)}
   <div class="wrap pull">
     <div class="card instalar noprint" id="instalar" style="display:none"><img src="img/icon-192.png" alt=""><div class="sp"><b>Instala «Clases de Economía»</b><div class="small mut">Tendrás el ícono en tu pantalla y se abrirá a pantalla completa.</div></div><button class="btn sm gold" id="ins">Instalar</button></div>
     <div class="card instalar noprint" id="iosins" style="display:none"><img src="img/icon-192.png" alt=""><div class="sp small"><b>Para instalar en iPhone:</b> toca <b>Compartir</b> ⬆️ y luego <b>«Agregar a pantalla de inicio»</b>.</div></div>
@@ -144,7 +144,7 @@ async function entrarPart() {
     if (S.bloqueado) return pintarBloqueo(); pintarPaso();
   } catch (e) { if (!manejar(e)) { toast(e.message, 4500); b.disabled = false; } }
 }
-function programarLatido() { clearTimeout(S.hb); S.hb = setTimeout(async () => { await latir(); if (S.enPart) programarLatido(); }, S.ritmoDoc ? 3000 : 15000); }
+function programarLatido() { clearTimeout(S.hb); S.hb = setTimeout(async () => { await latir(); if (S.enPart) programarLatido(); }, S.ritmoDoc ? 2500 : 4000); }
 function detenerPart() {
   S.enPart = false; clearTimeout(S.hb); clearInterval(S.poll); clearInterval(S.tick);
   document.removeEventListener('visibilitychange', alVisibilidad); window.removeEventListener('pagehide', alSalirPagina); window.removeEventListener('beforeunload', antesDeCerrar);
@@ -176,7 +176,7 @@ function alSalirPagina() { marcarSalida('cerró o recargó la página'); }
 async function latir() {
   if (!S.enPart || S.bloqueado || document.hidden) return;
   try {
-    const d = await API.call('latido', { sesion: S.ses.id });
+    const d = await API.call('latido', { sesion: S.ses.id, vista: S.ritmoDoc && S.vivo ? S.vivo.paso : S.idx });
     if (d.estado === 'bloqueado') { S.bloqueado = true; return pintarBloqueo(); }
     if (d.cerrada) { toast('El plazo de la sesión terminó.'); return finalizarPart(); }
     const antes = S.vivo ? claveVivo(S.vivo) : ''; const era = S.ritmoDoc; S.ritmoDoc = d.ritmo === 'docente'; setVivo(d);
@@ -211,7 +211,7 @@ async function terminarPart() {
 /* ---------- Pasos ---------- */
 function slideHtml(p) {
   if (p.tipo === 'documento') return `<div class="card slide"><h2>${esc(p.titulo || 'Material')}</h2>${p.texto ? md(p.texto) : ''}${bloqueEmbed(p) || `<a class="btn" href="${esc(urlAbrir(p))}" target="_blank" rel="noopener">Abrir material</a>`}</div>`;
-  return `<div class="card slide"><h2>${esc(p.titulo)}</h2>${md(p.texto)}${p.imagen ? `<img src="${esc(p.imagen)}" alt="" style="max-width:100%;border-radius:12px;margin-top:10px">` : ''}</div>`;
+  return slideStage(p, false);
 }
 function montarPart(top, body, foot) {
   const prev = document.querySelector('.part'); if (prev) prev.remove();
@@ -240,7 +240,7 @@ function pintarVivo() {
     timer = '<div class="timer"><i id="tbar"></i><b id="tnum"></b></div>';
     body = r ? '<div class="card c big-msg"><div class="emoji">✅</div><h2>¡Respuesta enviada!</h2><p class="mut">Espera los resultados…</p></div>' : `<div class="card">${cuerpoActividad(p)}</div>`;
   } else body = '<div id="vres"><div class="c"><span class="spin"></span></div></div>';
-  montarPart(`<div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><span class="alias sp">${esc(S.perfil.alias || 'Participante')}</span><span class="chip navy">En vivo</span><button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div>${timer}`, body);
+  montarPart(`<div class="row"><img src="img/insignia.png" alt=""><span class="live"></span><span class="alias sp">${esc(S.perfil.nombre || 'Participante')}</span><span class="chip navy">En vivo</span><button class="btn sm ghost" id="sal" style="color:#fff;border-color:rgba(255,255,255,.4)">Terminar</button></div>${timer}`, body);
   $('#sal').onclick = terminarPart;
   if (act && v.fase === 'pregunta') {
     const tic = () => {
