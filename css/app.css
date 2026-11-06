@@ -287,3 +287,42 @@ table.t tr:hover td{background:rgba(47,127,224,.06)}
 }
 .fxprev{max-width:460px;margin:8px auto 0}
 .edslide .stage,.mini .stage,.modal .stage{animation:none}
+/* ---- Movimiento de imágenes, objeto móvil y video dentro de la diapositiva ---- */
+.st-img{overflow:hidden}
+.st-img img{width:100%;height:100%;object-fit:cover;display:block;transform-origin:center;will-change:transform}
+.st-vid{background:#000}.st-vid iframe{width:100%;height:100%;border:0;display:block;background:#000}
+.st-vid .st-play{position:absolute;inset:0;display:grid;place-items:center;font-size:7cqw;color:#fff;text-shadow:0 2px 14px #000b}
+.vel-lento{--dur:1.7}.vel-normal{--dur:1}.vel-rapido{--dur:.55}
+.fx-zoom .st-img{animation:none!important}
+.fx-zoom .st-img img{animation:kb calc(16s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-paneo-der .st-img img{animation:mvPd calc(18s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-paneo-izq .st-img img{animation:mvPi calc(18s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-vaiven .st-img img{animation:mvVa calc(5s*var(--dur,1)) ease-in-out infinite}
+.mov-flotar .st-img img{animation:mvFl calc(6s*var(--dur,1)) ease-in-out infinite}
+.mov-diagonal .st-img img{animation:mvDi calc(20s*var(--dur,1)) ease-in-out infinite alternate}
+.mov-navegar .st-img img{animation:mvNa calc(22s*var(--dur,1)) ease-in-out infinite alternate}
+@keyframes mvPd{from{transform:scale(1.22) translateX(-7%)}to{transform:scale(1.22) translateX(7%)}}
+@keyframes mvPi{from{transform:scale(1.22) translateX(7%)}to{transform:scale(1.22) translateX(-7%)}}
+@keyframes mvVa{0%,100%{transform:scale(1.14) translateY(-1.6%) rotate(-1.3deg)}50%{transform:scale(1.14) translateY(1.6%) rotate(1.3deg)}}
+@keyframes mvFl{0%,100%{transform:scale(1.1) translateY(-2%)}50%{transform:scale(1.1) translateY(2%)}}
+@keyframes mvDi{from{transform:scale(1.25) translate(-6%,5%)}to{transform:scale(1.25) translate(6%,-5%)}}
+@keyframes mvNa{0%{transform:scale(1.3) translate(-8%,-1.5%) rotate(-1.1deg)}20%{transform:scale(1.3) translate(-5%,1.2%) rotate(1.1deg)}40%{transform:scale(1.3) translate(-1.5%,-1.2%) rotate(-1.1deg)}60%{transform:scale(1.3) translate(2%,1.2%) rotate(1.1deg)}80%{transform:scale(1.3) translate(5%,-1.2%) rotate(-1.1deg)}100%{transform:scale(1.3) translate(8%,1.5%) rotate(1.1deg)}}
+/* olas animadas sobre la imagen */
+.mov-navegar .st-img:before,.mov-navegar .st-img:after,.mov-vaiven .st-img:after{content:"";position:absolute;left:0;right:0;bottom:0;pointer-events:none;z-index:2}
+.mov-navegar .st-img:after,.mov-vaiven .st-img:after{height:17%;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 24' preserveAspectRatio='none'><path d='M0 12 Q20 0 40 12 T80 12 T120 12 T160 12 V24 H0Z' fill='%23ffffff' fill-opacity='.5'/></svg>") repeat-x;background-size:160px 100%;animation:olas calc(6s*var(--dur,1)) linear infinite}
+.mov-navegar .st-img:before{height:11%;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 24' preserveAspectRatio='none'><path d='M0 14 Q15 2 30 14 T60 14 T90 14 T120 14 V24 H0Z' fill='%23ffffff' fill-opacity='.35'/></svg>") repeat-x;background-size:120px 100%;animation:olas2 calc(4.2s*var(--dur,1)) linear infinite}
+@keyframes olas{from{background-position-x:0}to{background-position-x:-160px}}
+@keyframes olas2{from{background-position-x:0}to{background-position-x:120px}}
+/* objeto en movimiento (por ejemplo un barco recortado sobre el mar) */
+.st-obj{position:absolute;z-index:3;width:var(--ow,24%);height:auto;top:var(--oy,58%);pointer-events:none;user-select:none;filter:drop-shadow(0 .8cqw 1.2cqw rgba(0,0,0,.45))}
+.om-navegar{left:-35%;animation:objX calc(16s*var(--dur,1)) linear infinite,objBob calc(3.4s*var(--dur,1)) ease-in-out infinite alternate}
+.om-flotar{left:62%;animation:objFlo calc(4.5s*var(--dur,1)) ease-in-out infinite alternate}
+.om-volar{left:-20%;animation:objVol calc(12s*var(--dur,1)) linear infinite}
+.om-girar{left:68%;animation:objGir calc(14s*var(--dur,1)) linear infinite}
+@keyframes objX{from{left:-35%}to{left:105%}}
+@keyframes objBob{from{transform:translateY(-1.3cqw) rotate(-2.2deg)}to{transform:translateY(1.3cqw) rotate(2.2deg)}}
+@keyframes objFlo{from{transform:translateY(-2cqw) rotate(-3deg)}to{transform:translateY(2cqw) rotate(3deg)}}
+@keyframes objVol{from{left:-20%;top:calc(var(--oy,58%) + 20%)}to{left:105%;top:calc(var(--oy,58%) - 38%)}}
+@keyframes objGir{to{transform:rotate(360deg)}}
+/* en miniaturas y galerías no se anima (ahorra batería); la vista previa de efectos sí */
+.mini:not(.vivo) .stage .st-img img,.mini:not(.vivo) .stage .st-obj,.mini:not(.vivo) .stage .st-img:before,.mini:not(.vivo) .stage .st-img:after{animation:none!important}

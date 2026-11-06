@@ -5,12 +5,29 @@ const NOMBRE_DOC = 'Leandro Bascuñán';
 
 function shell(contenido) {
   const tabs = [['ctrl', '🎮 Control'], ['vivo', '📡 En vivo'],['corr', '✍️ Corrección'], ['res', '📊 Resultados'], ['est', '👥 Estudiantes'], ['ses', '🗂️ Sesiones'], ['inf', '📄 Informes'], ['cfg', '⚙️ Ajustes']];
-  App.innerHTML = `<div class="hero wide"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="brand sp">Colegio Marina de Chile<small>Panel docente · Economía y Sociedad · Unidad 4</small></div><button class="btn sm gold" id="vp">👁 Ver como estudiante</button><button class="btn sm ghost" id="out" style="color:#fff;border-color:rgba(255,255,255,.4)">Salir</button></div><h1>Hola, ${NOMBRE_DOC}</h1><p>Participación, resultados, corrección con IA e informes.</p></div></div>
+  App.innerHTML = `<div class="hero wide"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="brand sp">Colegio Marina de Chile<small>Panel docente · ${esc((T.cfg && T.cfg.asignatura) || 'Economía y Sociedad')} · ${esc((T.cfg && T.cfg.nombre_unidad) || 'Unidad 4')}</small></div><button class="btn sm gold" id="vp">👁 Ver como estudiante</button><button class="btn sm ghost" id="et" title="Cambiar el nombre de la asignatura y de la unidad" style="color:#fff;border-color:rgba(255,255,255,.4)">✏️ Título</button><button class="btn sm ghost" id="out" style="color:#fff;border-color:rgba(255,255,255,.4)">Salir</button></div><h1>Hola, ${NOMBRE_DOC}</h1><p>Participación, resultados, corrección con IA e informes.</p></div></div>
   <div class="wrap wide pull"><div class="tabs">${tabs.map(t => `<button class="tab ${T.tab === t[0] ? 'on' : ''}" data-t="${t[0]}">${t[1]}</button>`).join('')}</div><div id="main">${contenido || ''}</div></div>`;
-  $('#out').onclick = salir; $('#vp').onclick = () => verComoEstudiante(T.tab === 'vivo' || T.tab === 'corr' ? T.sel : '');
+  $('#out').onclick = salir; $('#et').onclick = editarTitulo; $('#vp').onclick = () => verComoEstudiante(T.tab === 'vivo' || T.tab === 'corr' ? T.sel : '');
   $$('.tab').forEach(b => b.onclick = () => ir(b.dataset.t));
 }
-/** Abre la app de estudiantes en una ventana con formato de celular, en modo vista previa (no guarda datos). */
+/** Cambia el nombre de la asignatura y de la unidad (aparece en el panel, en las pantallas de los estudiantes, informes y correos). */
+function editarTitulo() {
+  const c = T.cfg || {}; const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box"><div class="row"><h3 class="sp" style="margin:0">✏️ Título de la asignatura y la unidad</h3><button type="button" class="btn sm ghost" id="tx" aria-label="Cerrar">✕</button></div>
+  <label>Asignatura</label><input id="t_asig" value="${esc(c.asignatura || '')}" placeholder="Economía y Sociedad">
+  <label>Unidad</label><input id="t_uni" value="${esc(c.nombre_unidad || '')}" placeholder="Unidad 4 · Comercio internacional">
+  <label>Establecimiento</label><input id="t_col" value="${esc(c.colegio || '')}" placeholder="Colegio Marina de Chile · Concepción">
+  <div class="hint">Se muestra en el panel, en las pantallas de los estudiantes, en los informes PDF y en los correos.</div><div id="tmsg"></div>
+  <div class="row" style="margin-top:14px"><button type="button" class="btn gold" id="t_ok">Guardar</button><button type="button" class="btn ghost" id="t_no">Cancelar</button></div></div>`;
+  document.body.appendChild(m);
+  const cerrar = () => { m.remove(); document.removeEventListener('keydown', escT); }; const escT = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', escT);
+  $('#tx', m).onclick = cerrar; $('#t_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
+  $('#t_ok', m).onclick = async () => {
+    const cfgN = { asignatura: $('#t_asig', m).value.trim(), nombre_unidad: $('#t_uni', m).value.trim(), colegio: $('#t_col', m).value.trim() };
+    if (!cfgN.asignatura || !cfgN.nombre_unidad) return $('#tmsg', m).innerHTML = '<div class="err">Escribe la asignatura y la unidad.</div>';
+    try { await API.call('docGuardarConfig', { config: cfgN }); T.cfg = { ...T.cfg, ...cfgN }; cerrar(); toast('Título actualizado ✅'); ir(T.tab); } catch (e) { $('#tmsg', m).innerHTML = `<div class="err">${esc(e.message)}</div>`; if (e.code === 'SESION_EXPIRADA') { cerrar(); manejar(e); } }
+  };
+}/** Abre la app de estudiantes en una ventana con formato de celular, en modo vista previa (no guarda datos). */
 function verComoEstudiante(sid) {
   const w = window.open('about:blank', 'vistaprevia', 'width=410,height=860');
   API.call('docVistaPrevia').then(d => {
@@ -37,7 +54,7 @@ function manejar(e) { if (e.code === 'SESION_EXPIRADA') { toast('Sesión expirad
 
 /* ---------- Login (solo clave) ---------- */
 function login() {
-  App.innerHTML = `<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo big" src="img/insignia.png" alt=""><div class="brand">Colegio Marina de Chile<small>Panel docente</small></div></div><h1>${NOMBRE_DOC}</h1><p>Administrador · Economía y Sociedad</p></div></div>
+  App.innerHTML = `<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo big" src="img/insignia.png" alt=""><div class="brand">Colegio Marina de Chile<small>Panel docente</small></div></div><h1>${NOMBRE_DOC}</h1><p>Administrador</p></div></div>
   <div class="wrap pull"><form class="card" id="f"><label for="k">Clave</label><input id="k" type="password" autocomplete="current-password" required autofocus><div id="m"></div><button class="btn block" style="margin-top:14px">Ingresar</button></form></div>`;
   $('#f').onsubmit = async ev => {
     ev.preventDefault(); const b = $('#f button'); b.disabled = true;
@@ -269,7 +286,7 @@ function proyectar() {
     c.off = c.v.ahora - Date.now(); w._c = c; const v = c.v, p = c.paso; let cuerpo = '';
     const sig = JSON.stringify({ ...c, off: 0, v: { ...c.v, ahora: 0 } }); if (sig === w._sig) return; w._sig = sig;   // sin parpadeo si nada cambió
     if (!p) cuerpo = '<h1>Sin contenido</h1>';
-    else if (p.tipo === 'diapositiva') cuerpo = `<div style="width:min(calc(100vw - 56px), calc((100vh - 140px) * 1.7778));margin:0 auto">${slideStage(p, false)}</div>`;
+    else if (p.tipo === 'diapositiva') cuerpo = `<div style="width:min(calc(100vw - 56px), calc((100vh - 140px) * 1.7778));margin:0 auto">${slideStage(p, false, { live: true, proj: true })}</div>`;
     else if (!ESACT(p)) cuerpo = `<h1>${esc(p.titulo || '')}</h1>${bloqueEmbed(p)}`;
     else if (v.fase === 'ranking') cuerpo = `<h1>🏆 Ranking</h1><div style="max-width:700px">${podioHtml(c.ranking, '')}</div>`;
     else if (v.fase === 'espera') cuerpo = `<h1>${esc(p.pregunta)}</h1>${tilesDocente({ ...p, correcta: -1 })}<p class="mut">Prepárate…</p>`;
@@ -382,8 +399,11 @@ async function vEst() {
 function vSes() {
   if (T.edit) return editor();
   $('#main').innerHTML = `<div class="row" style="margin-bottom:10px"><h2 class="sp" style="margin:0">Sesiones de la unidad</h2><button class="btn" id="nueva">＋ Nueva sesión</button></div>
-  ${T.sesiones.map(s => `<div class="card row"><div class="ses" style="width:auto;cursor:default"><div class="n" style="width:42px;height:42px;border-radius:12px;background:var(--navy);color:#fff;display:grid;place-items:center;font:700 1rem Poppins">${s.numero}</div></div><div class="sp"><b>${esc(s.titulo)}</b> ${chipSes(s.temporal)}<div class="small mut">${s.pasos.length} pasos · ${s.material.length} materiales · ${s.apertura ? fmtFecha(s.apertura) : 'sin apertura'} → ${s.cierre ? fmtFecha(s.cierre) : 'sin cierre'}</div></div><button class="btn sm ghost" data-v="${esc(s.id)}">👁 Ver</button><button class="btn sm ghost" data-e="${esc(s.id)}">Editar</button><button class="btn sm ghost" data-d="${esc(s.id)}">🗑</button></div>`).join('') || '<div class="card mut c">No hay sesiones.</div>'}`;
+  <div class="card row" style="gap:10px"><b>Total de sesiones de la unidad:</b><input id="tot" type="number" min="1" max="60" value="${esc((T.cfg && T.cfg.total_sesiones) || 14)}" style="width:90px"><button class="btn sm" id="tots">Guardar</button><span class="small mut">Creadas: ${T.sesiones.length}. Se usa para calcular el avance de los estudiantes.</span><button class="btn sm ghost" id="rell">＋ Crear las que faltan</button></div>
+  ${T.sesiones.map(s => `<div class="card row"><div class="ses" style="width:auto;cursor:default"><div class="n" style="width:42px;height:42px;border-radius:12px;background:var(--navy);color:#fff;display:grid;place-items:center;font:700 1rem Poppins">${s.numero}</div></div><div class="sp"><b>${esc(s.titulo)}</b> ${chipSes(s.temporal)}<div class="small mut">${s.fecha ? '📅 ' + fmtDia(s.fecha) + ' · ' : ''}${s.pasos.length} pasos · ${s.material.length} materiales · ${s.apertura ? fmtFecha(s.apertura) : 'sin apertura'} → ${s.cierre ? fmtFecha(s.cierre) : 'sin cierre'}</div></div><button class="btn sm ghost" data-v="${esc(s.id)}">👁 Ver</button><button class="btn sm ghost" data-e="${esc(s.id)}">Editar</button><button class="btn sm ghost" data-d="${esc(s.id)}">🗑</button></div>`).join('') || '<div class="card mut c">No hay sesiones.</div>'}`;
   $('#nueva').onclick = () => { const mx = Math.max(0, ...T.sesiones.map(s => s.numero)); T.edit = { id: '', numero: mx + 1, titulo: '', descripcion: '', apertura: Date.now(), cierre: Date.now() + 7 * 864e5, estado: 'borrador', bloqueo: 'SI', ritmo: 'libre', paso_actual: 0, pasos: [], material: [], pauta_ia: '' }; editor(); };
+  $('#tots').onclick = async () => { const v = Math.max(1, Math.min(60, +$('#tot').value || 14)); try { await API.call('docGuardarConfig', { config: { total_sesiones: String(v) } }); T.cfg = { ...T.cfg, total_sesiones: String(v) }; toast('Total de sesiones: ' + v + ' ✅'); vSes(); } catch (e) { manejar(e); } };
+  $('#rell').onclick = async () => { const tot = Math.max(1, Math.min(60, +$('#tot').value || 14)); const hay = new Set(T.sesiones.map(s => s.numero)); const faltan = []; for (let i = 1; i <= tot; i++) if (!hay.has(i)) faltan.push(i); if (!faltan.length) return toast('Ya están creadas todas las sesiones.'); if (!confirm('Se crearán ' + faltan.length + ' sesiones vacías (en borrador): ' + faltan.join(', ') + '. ¿Continuar?')) return; try { for (const i of faltan) await API.call('docGuardarSesion', { sesion: { numero: i, titulo: 'Sesión ' + i, estado: 'borrador', pasos: [], material: [] } }); T.sesiones = (await API.call('docSesiones')).sesiones; toast('Sesiones creadas ✅'); vSes(); } catch (e) { manejar(e); } };
   $$('[data-v]').forEach(b => b.onclick = () => verComoEstudiante(b.dataset.v));
   $$('[data-e]').forEach(b => b.onclick = () => { T.edit = JSON.parse(JSON.stringify(T.sesiones.find(s => s.id === b.dataset.e))); editor(); });
   $$('[data-d]').forEach(b => b.onclick = async () => { if (!confirm('¿Eliminar la sesión? Las respuestas de los estudiantes se conservan en la planilla.')) return; try { await API.call('docEliminarSesion', { id: b.dataset.d }); T.sesiones = (await API.call('docSesiones')).sesiones; vSes(); } catch (e) { manejar(e); } });
@@ -391,36 +411,74 @@ function vSes() {
 const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva / video incrustado', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', nube: 'Nube de palabras (Menti)', escala: 'Escala 1 a 5 (Menti)', abierta: 'Pregunta abierta (IA)' };
 function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${etiqueta}</label>${tipo === 'area' ? `<textarea data-k="${k}">${esc(v ?? '')}</textarea>` : `<input data-k="${k}" type="${tipo}" value="${esc(v ?? '')}" ${extra}>`}`; }
 const PH_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb2f0"/><stop offset="1" stop-color="#2f6fb5"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="600" cy="180" r="90" fill="#ffffff55"/><path d="M0 600 L260 330 L430 480 L560 380 L800 600Z" fill="#ffffff44"/></svg>');
-/** Efectos y diseño de una diapositiva (o de TODA la presentación): 3D, formas, filtros, diseño y color, con vista previa. */
+const urlDrive = (r, ancho) => 'https://lh3.googleusercontent.com/d/' + r.id + (/gif/i.test(r.mime || '') ? '' : '=w' + (ancho || 1600));
+/** Efectos y diseño de una diapositiva (o de TODA la presentación): 3D, movimiento, formas, filtros, objeto móvil, con vista previa animada. */
 function modalEstilo(ed, rerender, global) {
   const slides = $$('#pasos .edslide'); if (!slides.length) return toast('Aún no hay diapositivas.');
   const base = ed || slides[0];
   const val = k => { const e = $(`[data-k="${k}"]`, base); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
-  const m0 = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || PH_IMG, layout: val('layout'), tema: val('tema'), fx: val('fx'), forma: val('forma') || 'completa', filtro: val('filtro') };
+  const m0 = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || PH_IMG, layout: val('layout'), tema: val('tema'), fx: val('fx'), forma: val('forma') || 'completa', filtro: val('filtro'), mov: val('mov'), movvel: val('movvel') || 'normal', obj: val('obj'), objmov: val('objmov') || 'navegar', objw: val('objw') || 24, objy: val('objy') === '' ? 58 : val('objy'), video: val('video'), vaudio: val('vaudio'), vauto: val('vauto'), vloop: val('vloop'), vctrl: val('vctrl'), vini: val('vini') };
   const opts = (obj, actual, vacio) => (global ? '<option value="__">(no cambiar)</option>' : '') + (vacio ? `<option value="" ${!global && !actual ? 'selected' : ''}>${vacio}</option>` : '') + Object.entries(obj).map(([k, v]) => `<option value="${k}" ${!global && actual === k ? 'selected' : ''}>${v}</option>`).join('');
   const m = document.createElement('div'); m.className = 'modal';
-  m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">${global ? '🎨 Estilo de toda la presentación' : '✨ Efectos y diseño de la diapositiva'}</h3><button type="button" class="btn sm ghost" id="ex" aria-label="Cerrar">✕</button></div>
+  m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">${global ? '🎨 Estilo de toda la presentación' : '✨ Efectos y movimiento de la diapositiva'}</h3><button type="button" class="btn sm ghost" id="ex" aria-label="Cerrar">✕</button></div>
   <div class="fxprev" id="fxp"></div>
   <div class="grid2"><div><label>Diseño</label><select id="s_lay">${opts(LAYOUTS, m0.layout)}</select></div><div><label>Color</label><select id="s_tema">${opts(TEMAS, m0.tema)}</select></div>
   <div><label>Efecto 3D / animación</label><select id="s_fx">${opts(FXS, m0.fx, 'Ninguno')}</select></div><div><label>Forma de la imagen</label><select id="s_forma">${opts(FORMAS_IMG, m0.forma)}</select></div>
+  <div><label>Movimiento de la imagen</label><select id="s_mov">${opts(MOVS, m0.mov, 'Sin movimiento')}</select></div><div><label>Velocidad</label><select id="s_vel">${opts(VELS, m0.movvel)}</select></div>
   <div><label>Filtro de imagen</label><select id="s_filtro">${opts(FILTROS, m0.filtro, 'Sin filtro')}</select></div></div>
-  ${global ? '<div class="hint">Se aplica a todas las diapositivas. «(no cambiar)» respeta lo que ya tiene cada una.</div>' : '<label class="row" style="font-weight:500"><input type="checkbox" id="s_all" style="width:20px;min-height:0;height:20px"> Aplicar también a todas las diapositivas</label>'}
-  <div class="row" style="margin-top:14px"><button type="button" class="btn gold" id="s_ok">Aplicar</button><button type="button" class="btn ghost" id="s_no">Cancelar</button></div><div class="hint">Los efectos 3D, formas y filtros se aprecian con una imagen. Aquí ves una de ejemplo si la diapositiva no tiene.</div></div>`;
+  ${global ? '<div class="hint">Se aplica a todas las diapositivas. «(no cambiar)» respeta lo que ya tiene cada una.</div>' : `<label class="row" style="font-weight:500"><input type="checkbox" id="s_all" style="width:20px;min-height:0;height:20px"> Aplicar también a todas las diapositivas</label>
+  <details ${m0.obj ? 'open' : ''} style="margin-top:10px"><summary><b>🚢 Objeto en movimiento (opcional)</b></summary>
+   <p class="small mut">Agrega una imagen con fondo transparente (PNG), por ejemplo un barco recortado, que se mueve sobre la diapositiva. El «Movimiento de la imagen» de arriba mueve la foto completa (con «Navegar» se mece con olas); el objeto es una pieza aparte que sí puede cruzar la pantalla.</p>
+   <div class="row"><input id="s_obj" placeholder="Dirección (URL) de la imagen PNG" value="${esc(m0.obj)}" style="flex:1;min-width:180px"><button type="button" class="btn sm ghost" id="s_objup">⬆ Subir</button><input type="file" id="s_objf" accept="image/*" hidden></div>
+   <div class="grid2"><div><label>Movimiento del objeto</label><select id="s_objmov">${Object.entries(OBJMOVS).map(([k, v]) => `<option value="${k}" ${m0.objmov === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div><div><label>Tamaño</label><input id="s_objw" type="range" min="10" max="50" value="${m0.objw}"></div></div>
+   <label>Altura en la diapositiva</label><input id="s_objy" type="range" min="0" max="80" value="${m0.objy}"></details>`}
+  <div class="row" style="margin-top:14px"><button type="button" class="btn gold" id="s_ok">Aplicar</button><button type="button" class="btn ghost" id="s_no">Cancelar</button></div><div class="hint">Aquí ves una vista previa animada. Las formas, el 3D y los filtros se aprecian con una imagen.</div></div>`;
   document.body.appendChild(m);
   const cerrar = () => { m.remove(); document.removeEventListener('keydown', escE); }; const escE = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', escE);
-  const sel = id => $('#' + id, m).value; const v_ = (id, orig) => { const x = sel(id); return x === '__' ? orig : x; };
-  const pint = () => { const o = { ...m0, layout: v_('s_lay', m0.layout), tema: v_('s_tema', m0.tema), fx: v_('s_fx', m0.fx), forma: v_('s_forma', m0.forma), filtro: v_('s_filtro', m0.filtro) }; $('#fxp', m).innerHTML = `<div class="mini">${slideStage(o, false)}</div>`; };
-  $$('select', m).forEach(s => s.onchange = pint); pint();
+  const sel = id => { const e = $('#' + id, m); return e ? e.value : ''; }; const v_ = (id, orig) => { const x = sel(id); return x === '__' ? orig : x; };
+  const pint = () => { const o = { ...m0, layout: v_('s_lay', m0.layout), tema: v_('s_tema', m0.tema), fx: v_('s_fx', m0.fx), forma: v_('s_forma', m0.forma), filtro: v_('s_filtro', m0.filtro), mov: v_('s_mov', m0.mov), movvel: v_('s_vel', m0.movvel) }; if (!global) { o.obj = sel('s_obj'); o.objmov = sel('s_objmov'); o.objw = sel('s_objw'); o.objy = sel('s_objy'); } $('#fxp', m).innerHTML = `<div class="mini vivo">${slideStage(o, false)}</div>`; };
+  $$('select, input[type=range]', m).forEach(s => s.onchange = s.oninput = pint); if ($('#s_obj', m)) $('#s_obj', m).oninput = pint; pint();
+  if ($('#s_objup', m)) { $('#s_objup', m).onclick = () => $('#s_objf', m).click(); $('#s_objf', m).onchange = async ev => { const f = ev.target.files[0]; if (!f) return; $('#s_objup', m).textContent = 'Subiendo…'; try { const r = await subirArchivo(f, () => { }); $('#s_obj', m).value = urlDrive(r, 800); pint(); } catch (er) { toast(er.message, 5000); } $('#s_objup', m).textContent = '⬆ Subir'; }; }
   $('#ex', m).onclick = cerrar; $('#s_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
   $('#s_ok', m).onclick = () => {
     const todos = global || ($('#s_all', m) && $('#s_all', m).checked); const objetivos = todos ? slides : [base];
     objetivos.forEach(s => {
       const set = (k, id) => { const x = sel(id); if (x === '__') return; const e = $(`[data-k="${k}"]`, s); if (e) e.value = x; };
-      set('layout', 's_lay'); set('tema', 's_tema'); set('fx', 's_fx'); set('forma', 's_forma'); set('filtro', 's_filtro');
+      set('layout', 's_lay'); set('tema', 's_tema'); set('fx', 's_fx'); set('forma', 's_forma'); set('filtro', 's_filtro'); set('mov', 's_mov'); set('movvel', 's_vel');
     });
+    if (!global) { const put = (k, id) => { const e = $(`[data-k="${k}"]`, base); if (e) e.value = sel(id); }; put('obj', 's_obj'); put('objmov', 's_objmov'); put('objw', 's_objw'); put('objy', 's_objy'); }
     cerrar(); rerender();
   };
-}/** Galería de diseños tipo Canva: muestra TU diapositiva en cada diseño y cada color para elegir con un toque. */
+}
+/** Video de YouTube dentro de la diapositiva, junto al texto; con o sin audio. */
+function modalVideo(ed, rerender) {
+  const val = k => { const e = $(`[data-k="${k}"]`, ed); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
+  const m0 = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Idea principal\n- Más información', layout: val('layout'), tema: val('tema') };
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">🎬 Video de YouTube en la diapositiva</h3><button type="button" class="btn sm ghost" id="vx" aria-label="Cerrar">✕</button></div>
+  <label>Dirección del video (YouTube)</label><input id="v_url" placeholder="https://www.youtube.com/watch?v=…" value="${esc(val('video'))}">
+  <div class="fxprev" id="v_prev"></div>
+  <div class="grid2"><div><label>Audio</label><select id="v_aud">${Object.entries(VAUDIOS).map(([k, v]) => `<option value="${k}" ${(val('vaudio') || 'silencio') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div><div><label>Comenzar en el segundo</label><input id="v_ini" type="number" min="0" value="${esc(val('vini'))}" placeholder="0"></div></div>
+  <label class="row" style="font-weight:500"><input type="checkbox" id="v_auto" ${val('vauto') ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Reproducir automáticamente</label>
+  <label class="row" style="font-weight:500"><input type="checkbox" id="v_loop" ${val('vloop') ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Repetir en bucle</label>
+  <label class="row" style="font-weight:500"><input type="checkbox" id="v_ctrl" ${val('vctrl') !== 'no' ? 'checked' : ''} style="width:20px;min-height:0;height:20px"> Mostrar controles</label>
+  <div class="hint">El video ocupa el lugar de la imagen y el texto de la diapositiva aparece junto a él. Elige dónde con «🎨 Diseños» (derecha, izquierda, arriba, dividido, fondo o tarjeta). Con audio, algunos navegadores esperan a que la persona toque la pantalla para reproducir el sonido.</div>
+  <div class="row" style="margin-top:12px"><button type="button" class="btn gold" id="v_ok">Aplicar</button><button type="button" class="btn ghost" id="v_no">Cancelar</button><button type="button" class="btn ghost" id="v_del" style="margin-left:auto">Quitar video</button></div></div>`;
+  document.body.appendChild(m);
+  const cerrar = () => { m.remove(); document.removeEventListener('keydown', escV); }; const escV = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', escV);
+  const pint = () => { $('#v_prev', m).innerHTML = ytId($('#v_url', m).value) ? `<div class="mini">${slideStage({ ...m0, video: $('#v_url', m).value, layout: ['solo', 'titulo', 'destacado', 'cita', 'portada'].includes(m0.layout) ? 'imagen-derecha' : m0.layout }, false)}</div>` : '<p class="small mut c">Pega un enlace de YouTube para ver la vista previa.</p>'; };
+  $('#v_url', m).oninput = pint; pint();
+  $('#vx', m).onclick = cerrar; $('#v_no', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
+  const put = (k, v) => { const e = $(`[data-k="${k}"]`, ed); if (e) e.value = v; };
+  $('#v_del', m).onclick = () => { put('video', ''); cerrar(); rerender(); };
+  $('#v_ok', m).onclick = () => {
+    const u = $('#v_url', m).value.trim(); if (u && !ytId(u)) return toast('Pega un enlace de YouTube válido (youtube.com/watch?v=… o youtu.be/…).', 4500);
+    put('video', u); put('vaudio', $('#v_aud', m).value); put('vauto', $('#v_auto', m).checked ? '1' : ''); put('vloop', $('#v_loop', m).checked ? '1' : ''); put('vctrl', $('#v_ctrl', m).checked ? 'si' : 'no'); put('vini', $('#v_ini', m).value);
+    if (u && ['solo', 'titulo', 'destacado', 'cita', 'portada', ''].includes(val('layout'))) put('layout', 'imagen-derecha');
+    cerrar(); rerender();
+  };
+}
+/** Galería de diseños tipo Canva: muestra TU diapositiva en cada diseño y cada color para elegir con un toque. */
 function galeria(ed, rerender) {
   const val = k => { const e = $(`[data-k="${k}"]`, ed); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
   const ph = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb2f0"/><stop offset="1" stop-color="#2f6fb5"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="600" cy="180" r="90" fill="#ffffff55"/><path d="M0 600 L260 330 L430 480 L560 380 L800 600Z" fill="#ffffff44"/></svg>');
@@ -465,7 +523,7 @@ function tiempoDefCliente(t) { return { opcion: 20, vf: 15, numerica: 40, encues
 function pasoForm(p, i) {
   let f = '';
   if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
-  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm" data-a="fx">✨ Efectos</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><input type="hidden" data-k="fx" value="${esc(p.fx || '')}"><input type="hidden" data-k="forma" value="${esc(p.forma || '')}"><input type="hidden" data-k="filtro" value="${esc(p.filtro || '')}"><div class="imgpanel"></div></div>`;
+  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm" data-a="fx">✨ Efectos</button><button class="btn sm" data-a="vid">🎬 Video</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><input type="hidden" data-k="fx" value="${esc(p.fx || '')}"><input type="hidden" data-k="forma" value="${esc(p.forma || '')}"><input type="hidden" data-k="filtro" value="${esc(p.filtro || '')}">${['mov', 'movvel', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].map(k => `<input type="hidden" data-k="${k}" value="${esc(p[k] ?? '')}">`).join('')}<div class="imgpanel"></div></div>`;
   else f = preguntaEditor(p);
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
 }
@@ -474,7 +532,7 @@ function leerPasos() {
     const g = k => { const e = $(`[data-k="${k}"]`, c); if (!e) return undefined; return e.value !== undefined ? e.value : e.innerText.replace(/ /g, ' ').replace(/\n+$/, ''); };
     const p = { id: T.edit.pasos[+c.dataset.i]?.id || 'n' + Math.random().toString(36).slice(2, 7), tipo: g('tipo') };
     if (p.tipo === 'documento') { p.titulo = g('titulo'); p.texto = g('texto'); p.url = g('url'); p.driveId = g('driveId'); p.mime = g('mime'); return p; }
-    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); p.fx = g('fx'); p.forma = g('forma'); p.filtro = g('filtro'); return p; }
+    if (p.tipo === 'diapositiva') { p.titulo = g('titulo'); p.texto = g('texto'); p.imagen = g('imagen'); p.credito = g('credito'); p.layout = g('layout'); p.tema = g('tema'); p.fx = g('fx'); p.forma = g('forma'); p.filtro = g('filtro'); ['mov', 'movvel', 'obj', 'objmov', 'objw', 'objy', 'video', 'vaudio', 'vauto', 'vloop', 'vctrl', 'vini'].forEach(k => p[k] = g(k)); return p; }
     p.pregunta = g('pregunta'); p.puntos = +g('puntos') || 1; if (+g('tiempo')) p.tiempo = +g('tiempo');
     if (g('titulo') !== undefined) p.titulo = g('titulo');
     if (p.tipo === 'opcion' || p.tipo === 'encuesta') { const ops = []; let corr = 0; $$('.q-tiles .tile', c).forEach(t => { const tx = ($('[data-opt]', t).innerText || '').trim(); if (!tx) return; if (t.classList.contains('ok')) corr = ops.length; ops.push(tx); }); p.opciones = ops; if (p.tipo === 'opcion') p.correcta = corr; }
@@ -491,6 +549,7 @@ function editor() {
   $('#main').innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn sm ghost" id="bk">← Volver</button><h2 class="sp" style="margin:0">${e.id ? 'Editar' : 'Nueva'} sesión ${e.numero}</h2><button class="btn" id="sv">💾 Guardar</button></div>
   <div class="card"><div class="grid2"><div>${campo('numero', 'N° de sesión', e.numero, 'number')}</div><div><label>Estado</label><select id="est"><option value="borrador" ${e.estado === 'borrador' ? 'selected' : ''}>Borrador (oculta)</option><option value="publicada" ${e.estado === 'publicada' ? 'selected' : ''}>Publicada</option></select></div></div>
   ${campo('titulo', 'Título', e.titulo)}${campo('descripcion', 'Descripción', e.descripcion, 'area')}
+  <label>Fecha de la sesión (opcional)</label><input id="fe" type="date" value="${esc(e.fecha || '')}"><div class="hint">Los estudiantes la ven en la lista de sesiones. No cambia el plazo para responder (eso se define abajo).</div>
   <div class="grid2"><div><label>Abre (plazo)</label><input id="ap" type="datetime-local" value="${aInputLocal(e.apertura)}"></div><div><label>Cierra (plazo límite para actividades)</label><input id="ci" type="datetime-local" value="${aInputLocal(e.cierre)}"></div></div>
   <label>Modo concentración (bloqueo al salir de la app)</label><select id="bl"><option value="SI" ${e.bloqueo !== 'NO' ? 'selected' : ''}>Activado</option><option value="NO" ${e.bloqueo === 'NO' ? 'selected' : ''}>Desactivado</option></select>
   ${campo('pauta_ia', 'Notas para la IA (errores frecuentes, criterios)', e.pauta_ia, 'area')}</div>
@@ -538,9 +597,9 @@ function editor() {
     if (!nuevosP.length && !nuevosM.length) return;
     insertar(nuevosP, nuevosM); toast('Archivos agregados a la clase. Recuerda pulsar «Guardar».', 5000);
   }
-  function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
+  function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.fecha = $('#fe') ? $('#fe').value : (e.fecha || ''); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
   $('#pasos').onchange = ev => { if (ev.target.dataset.k === 'tipo') { const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); ps[i] = { id: ps[i].id, tipo: ps[i].tipo, titulo: ps[i].titulo, texto: ps[i].texto, pregunta: ps[i].pregunta, puntos: ps[i].puntos || 1, opciones: ['', '', '', ''], correcta: ps[i].tipo === 'vf' ? 'V' : 0, campos: ['Tu respuesta'] }; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); } };
-  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || ['img', 'noimg', 'gal', 'fx', 'ok', 'addopt', 'rmopt'].includes(a)) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
+  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || ['img', 'noimg', 'gal', 'fx', 'vid', 'ok', 'addopt', 'rmopt'].includes(a)) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
   $('#pasos').addEventListener('click', ev => {
     const a = ev.target.dataset.a; if (!['ok', 'addopt', 'rmopt'].includes(a)) return;
     const card = ev.target.closest('.paso-ed'); const tipo = $('[data-k="tipo"]', card).value; const box = $('.q-tiles', card);
@@ -552,10 +611,11 @@ function editor() {
   $('#pasos').addEventListener('change', ev => { const k = ev.target.dataset.k; if (k === 'layout' || k === 'tema') rerender(); });
   if ($('#gs')) $('#gs').onclick = () => modalEstilo(null, rerender, true);
   $('#pasos').addEventListener('click', ev => {
-    const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg' && a !== 'gal' && a !== 'fx') return;
+    const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg' && a !== 'gal' && a !== 'fx' && a !== 'vid') return;
     const ed = ev.target.closest('.edslide'); const set = (src, cred) => { $('[data-k="imagen"]', ed).value = src; $('[data-k="credito"]', ed).value = cred || ''; rerender(); };
     if (a === 'gal') return galeria(ed, rerender);
     if (a === 'fx') return modalEstilo(ed, rerender, false);
+    if (a === 'vid') return modalVideo(ed, rerender);
     if (a === 'noimg') return set('', '');
     const panel = $('.imgpanel', ed); const titulo = ($('[data-k="titulo"]', ed).innerText || '').trim();
     panel.innerHTML = `<div class="card" style="margin-top:8px"><div class="row"><input class="iq" placeholder="Buscar imágenes en internet… (ej: puerto de Valparaíso)" value="${esc(titulo)}" style="flex:1;min-width:180px"><button class="btn sm iqb">🔍 Buscar</button></div><div class="row" style="margin-top:6px"><input class="iu" placeholder="…o pega la dirección (URL) de una imagen" style="flex:1;min-width:180px"><button class="btn sm ghost iub">Usar URL</button><button class="btn sm ghost iup">⬆ Subir</button><input type="file" class="iuf" accept="image/*" hidden></div><div class="imgres"></div><div class="hint">Resultados de Wikimedia Commons y Openverse (licencias libres). El crédito del autor queda en la diapositiva.</div></div>`;
@@ -564,7 +624,7 @@ function editor() {
     $('.iqb', panel).onclick = buscar; $('.iq', panel).onkeydown = ev2 => { if (ev2.key === 'Enter') buscar(); }; buscar();
     $('.iub', panel).onclick = () => { const u = $('.iu', panel).value.trim(); if (!/^https:\/\//i.test(u)) return toast('Pega una dirección que empiece con https://'); set(u, ''); };
     $('.iup', panel).onclick = () => $('.iuf', panel).click();
-    $('.iuf', panel).onchange = async ev2 => { const f = ev2.target.files[0]; if (!f) return; res.innerHTML = '<span class="spin"></span> Subiendo…'; try { const r = await subirArchivo(f, () => { }); set('https://drive.google.com/thumbnail?id=' + r.id + '&sz=w1600', ''); } catch (er) { res.innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
+    $('.iuf', panel).onchange = async ev2 => { const f = ev2.target.files[0]; if (!f) return; res.innerHTML = '<span class="spin"></span> Subiendo…'; try { const r = await subirArchivo(f, () => { }); set(urlDrive(r, 1600), ''); } catch (er) { res.innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
   });
   $('#mats').onclick = ev => { if (ev.target.dataset.rm !== undefined) { const m = leerMat(); m.splice(+ev.target.dataset.rm, 1); e.pasos = leerPasos(); e.material = m; copiarCab(); editor(); } };
   $('#sv').onclick = async () => {

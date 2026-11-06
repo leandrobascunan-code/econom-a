@@ -39,6 +39,8 @@ function fmtFecha(ms, corto) {
   return corto ? d.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : d.toLocaleString('es-CL', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
+/** 'AAAA-MM-DD' -> 'mié, 12 nov' (sin problemas de zona horaria) */
+function fmtDia(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); if (!m) return ''; return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' }); }
 function fmtHora(ms) { return ms ? new Date(ms).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'; }
 function aInputLocal(ms) { if (!ms) return ''; const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); }
 
@@ -90,16 +92,34 @@ function textoRico(t) {
   });
   return html + (ul ? '</ul>' : '');
 }
-/** edit=true: título y texto editables directamente sobre la diapositiva */
-function slideStage(p, edit) {
-  const lay = LAYOUTS[p.layout] ? p.layout : (p.imagen ? 'imagen-derecha' : 'solo'); const th = TEMAS[p.tema] ? p.tema : 'azul';
+const MOVS = { 'paneo-der': 'Paneo → derecha', 'paneo-izq': 'Paneo ← izquierda', vaiven: 'Oleaje (vaivén)', navegar: 'Navegar (barco con olas)', flotar: 'Flotar', diagonal: 'Recorrido diagonal' };
+const VELS = { lento: 'Lento', normal: 'Normal', rapido: 'Rápido' };
+const OBJMOVS = { navegar: 'Navegar de lado a lado', flotar: 'Flotar', volar: 'Volar en diagonal', girar: 'Girar' };
+const VAUDIOS = { silencio: 'Sin audio', audio: 'Con audio en todas las pantallas', proy: 'Audio solo en la proyección del docente' };
+function ytId(u) { const m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/.exec(String(u || '')); return m ? m[1] : ''; }
+function ytUrl(p, proj) {
+  const id = ytId(p.video); if (!id) return '';
+  const silencio = p.vaudio === 'audio' ? false : p.vaudio === 'proy' ? !proj : true;
+  const q = new URLSearchParams({ mute: silencio ? 1 : 0, autoplay: p.vauto ? 1 : 0, controls: p.vctrl === 'no' ? 0 : 1, rel: 0, modestbranding: 1, playsinline: 1 });
+  if (p.vloop) { q.set('loop', 1); q.set('playlist', id); }
+  const ini = Number(p.vini) || 0; if (ini > 0) q.set('start', ini);
+  return 'https://www.youtube-nocookie.com/embed/' + id + '?' + q.toString();
+}
+/** edit=true: título y texto editables sobre la diapositiva.  opts.live: reproduce el video (si no, muestra su miniatura).  opts.proj: es la proyección del docente. */
+function slideStage(p, edit, opts) {
+  opts = opts || {}; const vid = ytId(p.video); const hay = !!(p.imagen || vid);
+  const lay = LAYOUTS[p.layout] ? p.layout : (hay ? 'imagen-derecha' : 'solo'); const th = TEMAS[p.tema] ? p.tema : 'azul';
   const fx = FXS[p.fx] ? p.fx : '', fo0 = FORMAS_IMG[p.forma] ? p.forma : 'completa', fi = FILTROS[p.filtro] ? p.filtro : '';
   const fo = ['inclinado', 'flotante', 'polaroid', 'profundidad'].includes(fx) && fo0 === 'completa' ? 'tarjeta' : fo0;   // los efectos 3D necesitan la imagen como tarjeta
-  const fxCls = (fx ? 'fx-' + fx + ' ' : '') + 'forma-' + fo + (fi ? ' filt-' + fi : '');
-  const img = p.imagen ? `<div class="st-img" style="background-image:url('${esc(p.imagen)}')"></div>` : '';
+  const mov = MOVS[p.mov] ? p.mov : '', vel = VELS[p.movvel] ? p.movvel : 'normal';
+  const fxCls = (fx ? 'fx-' + fx + ' ' : '') + 'forma-' + fo + (fi ? ' filt-' + fi : '') + (mov ? ' mov-' + mov : '') + ' vel-' + vel + (vid ? ' con-video' : '');
+  let media = '';
+  if (vid) media = opts.live ? `<div class="st-img st-vid"><iframe src="${esc(ytUrl(p, opts.proj))}" title="Video" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>` : `<div class="st-img st-vid"><img src="https://img.youtube.com/vi/${vid}/hqdefault.jpg" alt="" referrerpolicy="no-referrer"><span class="st-play">▶</span></div>`;
+  else if (p.imagen) media = `<div class="st-img"><img src="${esc(p.imagen)}" alt="" referrerpolicy="no-referrer" draggable="false"></div>`;
+  const obj = p.obj ? `<img class="st-obj om-${OBJMOVS[p.objmov] ? p.objmov : 'navegar'}" src="${esc(p.obj)}" alt="" referrerpolicy="no-referrer" draggable="false" style="--ow:${Math.max(8, Math.min(60, Number(p.objw) || 24))}%;--oy:${Math.max(0, Math.min(80, p.objy === '' || p.objy === undefined ? 58 : Number(p.objy)))}%">` : '';
   const t = edit ? `<h2 class="st-t" contenteditable="plaintext-only" spellcheck="false" data-k="titulo" data-ph="Título">${esc(p.titulo)}</h2>` : `<h2 class="st-t">${esc(p.titulo)}</h2>`;
   const b = edit ? `<div class="st-b" contenteditable="plaintext-only" spellcheck="false" data-k="texto" data-ph="Escribe aquí… (usa «- » para viñetas)">${esc(p.texto)}</div>` : `<div class="st-b">${textoRico(p.texto)}</div>`;
-  return `<div class="stage th-${th} lay-${lay} ${p.imagen ? 'con-img' : ''} ${fxCls}"><div class="st-deco"></div>${img}<div class="st-txt">${t}${b}</div>${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
+  return `<div class="stage th-${th} lay-${lay} ${hay ? 'con-img' : ''} ${fxCls}"><div class="st-deco"></div>${media}<div class="st-txt">${t}${b}</div>${obj}${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
 }
 /** Reduce el tamaño del texto de cada diapositiva hasta que quepa completo (nada se corta, ni arriba ni abajo). */
 function ajustarDiapos(root) {

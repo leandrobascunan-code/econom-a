@@ -79,7 +79,7 @@ async function inicio() {
 function chipEstado(e, vivo) { if (vivo) return '<span class="chip bad">🔴 En vivo</span>'; return { abierta: '<span class="chip ok">Abierta</span>', cerrada: '<span class="chip bad">Plazo cerrado</span>', proximamente: '<span class="chip warn">Próximamente</span>' }[e] || ''; }
 function tarjetaSesion(s) {
   return `<button class="card ses ${s.estado} row" data-id="${esc(s.id)}" style="gap:14px"><div class="n">${s.numero}</div><div class="sp"><div class="row" style="gap:8px"><b>${esc(s.titulo)}</b></div>
-  <div class="small mut">${s.estado === 'abierta' ? 'Cierra: ' + fmtFecha(s.cierre) : s.estado === 'cerrada' ? 'Cerró: ' + fmtFecha(s.cierre) : 'Abre: ' + fmtFecha(s.apertura)}</div>
+  <div class="small mut">${s.fecha ? '📅 ' + fmtDia(s.fecha) + ' · ' : ''}${s.estado === 'abierta' ? 'Cierra: ' + fmtFecha(s.cierre) : s.estado === 'cerrada' ? 'Cerró: ' + fmtFecha(s.cierre) : 'Abre: ' + fmtFecha(s.apertura)}</div>
   <div class="bar" style="margin:8px 0 4px"><i style="width:${s.actividades ? Math.round(s.respondidas / s.actividades * 100) : 0}%"></i></div>
   <div class="small mut">${s.respondidas}/${s.actividades} actividades${s.pendientes ? ' · ' + s.pendientes + ' en revisión' : ''}${s.nota !== null ? ' · Nota ' + String(s.nota).replace('.', ',') : ''}</div></div>${chipEstado(s.estado, s.enVivo)}</button>`;
 }
@@ -119,7 +119,7 @@ function pintarSesion(tab) {
         <button class="btn block" id="ent">${s.ritmo === 'docente' ? '🔴 Entrar a la clase en vivo' : hechas ? 'Continuar participando' : 'Entrar a participar'} →</button>`
         : `<div class="info">${s.estado === 'cerrada' ? 'El plazo terminó: ya no puedes responder actividades, pero puedes revisar el material y tus resultados.' : 'Esta sesión aún no se abre.'}</div>`}`;
   }
-  App.innerHTML = `${banner()}<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="sp"><div class="brand">Colegio Marina de Chile<small>Clases de Economía</small></div></div><button class="btn sm ghost" id="back" style="color:#fff;border-color:rgba(255,255,255,.4)">← Volver</button></div><h1>Sesión ${s.numero}</h1><p>${esc(s.titulo)}</p></div></div>
+  App.innerHTML = `${banner()}<div class="hero"><div class="stars"></div><div class="in"><div class="hero-top"><img class="logo" src="img/insignia.png" alt=""><div class="sp"><div class="brand">Colegio Marina de Chile<small>Clases de Economía</small></div></div><button class="btn sm ghost" id="back" style="color:#fff;border-color:rgba(255,255,255,.4)">← Volver</button></div><h1>Sesión ${s.numero}</h1><p>${s.fecha ? '📅 ' + esc(fmtDia(s.fecha)) + ' · ' : ''}${esc(s.titulo)}</p></div></div>
   <div class="wrap pull"><div class="tabs"><button class="tab ${tab === 'part' ? 'on' : ''}" data-t="part">Participar</button><button class="tab ${tab === 'mat' ? 'on' : ''}" data-t="mat">Material y videos</button><button class="tab ${tab === 'res' ? 'on' : ''}" data-t="res">Mis resultados</button></div>${cuerpo}</div>`;
   $('#back').onclick = inicio; $$('.tab').forEach(b => b.onclick = () => pintarSesion(b.dataset.t));
   if ($('#ent')) $('#ent').onclick = () => entrarPart();
@@ -211,7 +211,7 @@ async function terminarPart() {
 /* ---------- Pasos ---------- */
 function slideHtml(p) {
   if (p.tipo === 'documento') return `<div class="card slide"><h2>${esc(p.titulo || 'Material')}</h2>${p.texto ? md(p.texto) : ''}${bloqueEmbed(p) || `<a class="btn" href="${esc(urlAbrir(p))}" target="_blank" rel="noopener">Abrir material</a>`}</div>`;
-  return slideStage(p, false);
+  return slideStage(p, false, { live: true });
 }
 function montarPart(top, body, foot) {
   const prev = document.querySelector('.part'); if (prev) prev.remove();
