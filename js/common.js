@@ -1,4 +1,4 @@
-/* Utilidades compartidas (estudiante y docente) */
+﻿/* Utilidades compartidas (estudiante y docente) */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -75,8 +75,8 @@ function bloqueEmbed(m) {
 }
 function urlAbrir(m) { return m.driveId ? 'https://drive.google.com/file/d/' + m.driveId + '/view' : (m.url || ''); }
 /* ---- Diapositivas visuales (estilo presentación) ---- */
-const LAYOUTS = { portada: 'Portada', 'imagen-derecha': 'Imagen a la derecha', 'imagen-izquierda': 'Imagen a la izquierda', solo: 'Solo texto', destacado: 'Destacado', fondo: 'Imagen de fondo' };
-const TEMAS = { azul: 'Azul marino', claro: 'Claro', oscuro: 'Oscuro', dorado: 'Dorado' };
+const LAYOUTS = { portada: 'Portada', titulo: 'Solo título', solo: 'Solo texto', 'imagen-derecha': 'Imagen a la derecha', 'imagen-izquierda': 'Imagen a la izquierda', 'imagen-arriba': 'Imagen arriba', dividido: 'Dividido 50/50', fondo: 'Imagen de fondo', tarjeta: 'Tarjeta sobre imagen', destacado: 'Idea destacada', cita: 'Cita' };
+const TEMAS = { azul: 'Azul marino', claro: 'Claro', oscuro: 'Oscuro', dorado: 'Dorado', oceano: 'Océano', atardecer: 'Atardecer', bosque: 'Bosque', minimal: 'Minimal', marfil: 'Marfil', neon: 'Neón' };
 function inline(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>'); }
 function textoRico(t) {
   let html = '', ul = false;
@@ -95,7 +95,19 @@ function slideStage(p, edit) {
   const b = edit ? `<div class="st-b" contenteditable="plaintext-only" spellcheck="false" data-k="texto" data-ph="Escribe aquí… (usa «- » para viñetas)">${esc(p.texto)}</div>` : `<div class="st-b">${textoRico(p.texto)}</div>`;
   return `<div class="stage th-${th} lay-${lay} ${p.imagen ? 'con-img' : ''}"><div class="st-deco"></div>${img}<div class="st-txt">${t}${b}</div>${p.credito ? `<div class="st-credit">${esc(p.credito)}</div>` : ''}<img class="st-logo" src="img/insignia.png" alt=""></div>`;
 }
-/** Busca imágenes libres en internet (Wikimedia Commons y Openverse). Devuelve [{src, thumb, credito}] */
+/** Reduce el tamaño del texto de cada diapositiva hasta que quepa completo (nada se corta, ni arriba ni abajo). */
+function ajustarDiapos(root) {
+  (root || document).querySelectorAll('.stage').forEach(st => {
+    const box = st.querySelector('.st-txt'); if (!box || !st.clientWidth) return;
+    let fs = 1; st.style.setProperty('--fs', 1); let g = 0;
+    while (g++ < 14 && fs > 0.38 && (box.scrollHeight > box.clientHeight + 1 || box.scrollWidth > box.clientWidth + 1)) { fs -= 0.06; st.style.setProperty('--fs', fs.toFixed(2)); }
+  });
+}
+(function () {
+  let t; const pedir = () => { clearTimeout(t); t = setTimeout(() => ajustarDiapos(), 40); };
+  const ini = () => { new MutationObserver(pedir).observe(document.body, { childList: true, subtree: true }); window.addEventListener('resize', pedir); document.addEventListener('input', e => { if (e.target.closest && e.target.closest('.stage')) pedir(); }); if (document.fonts && document.fonts.ready) document.fonts.ready.then(pedir); pedir(); };
+  if (document.body) ini(); else document.addEventListener('DOMContentLoaded', ini);
+})();/** Busca imágenes libres en internet (Wikimedia Commons y Openverse). Devuelve [{src, thumb, credito}] */
 async function buscarImagenes(q) {
   const out = []; const limpia = h => String(h || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
   const ps = [

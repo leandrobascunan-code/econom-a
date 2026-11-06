@@ -179,12 +179,12 @@ async function accionVivo(d) {
   if (T.busy) return; T.busy = true; $$('.remote .btn').forEach(b => b.disabled = true);
   const q = { ...d }; if (['avanzar', 'anterior', 'siguiente', 'ir'].includes(q.op)) q.auto = T.auto.lanzar;
   if (!q.ritmo && T.cv && T.cv.v.ritmo !== 'docente' && q.op !== 'tiempo') q.ritmo = 'docente';   // al mover, se activa el modo en vivo solo
-  try { await API.call('docVivoAccion', { sesion: T.sel, ...q }); T.busy = false; await refrescarCtrl(true); }
+  try { const est = await API.call('docVivoAccion', { sesion: T.sel, curso: T.cursoCtrl || '', ...q }); T.busy = false; await refrescarCtrl(true, est && est.v ? est : undefined); }
   catch (e) { T.busy = false; $$('.remote .btn').forEach(b => b.disabled = false); manejar(e); }
 }
-async function refrescarCtrl(forzar) {
+async function refrescarCtrl(forzar, datos) {
   if (!$('#cv') || (document.hidden && !forzar) || (T.busy && !forzar)) return;
-  let c; try { c = await API.call('docVivo', { sesion: T.sel, curso: T.cursoCtrl || '' }); } catch (e) { return manejar(e); }
+  let c = datos; if (!c) { try { c = await API.call('docVivo', { sesion: T.sel, curso: T.cursoCtrl || '' }); } catch (e) { return manejar(e); } }
   c.off = c.v.ahora - Date.now(); T.cv = c; const v = c.v, p = c.paso;
   const act = ESACT(p); const enVivo = v.ritmo === 'docente';
   const kAuto = v.paso + '|' + v.t;
@@ -261,7 +261,7 @@ function proyectar() {
     c.off = c.v.ahora - Date.now(); w._c = c; const v = c.v, p = c.paso; let cuerpo = '';
     const sig = JSON.stringify({ ...c, off: 0, v: { ...c.v, ahora: 0 } }); if (sig === w._sig) return; w._sig = sig;   // sin parpadeo si nada cambió
     if (!p) cuerpo = '<h1>Sin contenido</h1>';
-    else if (p.tipo === 'diapositiva') cuerpo = `<div style="max-width:min(1100px,150vh);margin:0 auto">${slideStage(p, false)}</div>`;
+    else if (p.tipo === 'diapositiva') cuerpo = `<div style="width:min(calc(100vw - 56px), calc((100vh - 140px) * 1.7778));margin:0 auto">${slideStage(p, false)}</div>`;
     else if (!ESACT(p)) cuerpo = `<h1>${esc(p.titulo || '')}</h1>${bloqueEmbed(p)}`;
     else if (v.fase === 'ranking') cuerpo = `<h1>🏆 Ranking</h1><div style="max-width:700px">${podioHtml(c.ranking, '')}</div>`;
     else if (v.fase === 'espera') cuerpo = `<h1>${esc(p.pregunta)}</h1>${tilesDocente({ ...p, correcta: -1 })}<p class="mut">Prepárate…</p>`;
@@ -382,7 +382,22 @@ function vSes() {
 }
 const TIPOS = { diapositiva: 'Diapositiva (texto)', documento: 'Archivo / Canva / video incrustado', opcion: 'Selección múltiple', vf: 'Verdadero/Falso', numerica: 'Respuesta numérica', encuesta: 'Encuesta (sin correcta)', nube: 'Nube de palabras (Menti)', escala: 'Escala 1 a 5 (Menti)', abierta: 'Pregunta abierta (IA)' };
 function campo(k, etiqueta, v, tipo = 'text', extra = '') { return `<label>${etiqueta}</label>${tipo === 'area' ? `<textarea data-k="${k}">${esc(v ?? '')}</textarea>` : `<input data-k="${k}" type="${tipo}" value="${esc(v ?? '')}" ${extra}>`}`; }
-/* ---------- Editor de preguntas "como se ven" (estilo Kahoot): se escribe sobre los recuadros ---------- */
+/** Galería de diseños tipo Canva: muestra TU diapositiva en cada diseño y cada color para elegir con un toque. */
+function galeria(ed, rerender) {
+  const val = k => { const e = $(`[data-k="${k}"]`, ed); return e ? (e.value !== undefined ? e.value : e.innerText) : ''; };
+  const ph = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb2f0"/><stop offset="1" stop-color="#2f6fb5"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="600" cy="180" r="90" fill="#ffffff55"/><path d="M0 600 L260 330 L430 480 L560 380 L800 600Z" fill="#ffffff44"/></svg>');
+  const base = { titulo: val('titulo').trim() || 'Título de la diapositiva', texto: val('texto').trim() || '- Primera idea\n- Segunda idea\n- Tercera idea', imagen: val('imagen') || ph, credito: '', layout: val('layout'), tema: val('tema') };
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box ancho"><div class="row"><h3 class="sp" style="margin:0">🎨 Elige un diseño</h3><button type="button" class="btn sm ghost" id="gx" aria-label="Cerrar">✕</button></div><p class="small mut">Toca el que más te guste. Tu texto y tu imagen se conservan.</p>
+  <b>Diseño</b><div class="galeria">${Object.entries(LAYOUTS).map(([k, v]) => `<button type="button" data-lay="${k}" class="${k === base.layout ? 'on' : ''}"><div class="mini">${slideStage({ ...base, layout: k }, false)}</div><small>${v}</small></button>`).join('')}</div>
+  <b>Colores</b><div class="galeria">${Object.entries(TEMAS).map(([k, v]) => `<button type="button" data-tema="${k}" class="${k === base.tema ? 'on' : ''}"><div class="mini">${slideStage({ ...base, tema: k }, false)}</div><small>${v}</small></button>`).join('')}</div>
+  <label class="row" style="font-weight:500"><input type="checkbox" id="gall" style="width:20px;min-height:0;height:20px"> Aplicar el color elegido a toda la presentación</label></div>`;
+  document.body.appendChild(m);
+  const cerrar = () => { m.remove(); document.removeEventListener('keydown', escG); }; const escG = e => { if (e.key === 'Escape') cerrar(); }; document.addEventListener('keydown', escG);
+  $('#gx', m).onclick = cerrar; m.onclick = e => { if (e.target === m) cerrar(); };
+  $$('[data-lay]', m).forEach(b => b.onclick = () => { $('[data-k="layout"]', ed).value = b.dataset.lay; cerrar(); rerender(); });
+  $$('[data-tema]', m).forEach(b => b.onclick = () => { const t = b.dataset.tema; if ($('#gall', m).checked) $$('.edslide [data-k="tema"]').forEach(s => s.value = t); else $('[data-k="tema"]', ed).value = t; cerrar(); rerender(); });
+}/* ---------- Editor de preguntas "como se ven" (estilo Kahoot): se escribe sobre los recuadros ---------- */
 function tileEd(i, txt, ok, tipo) {
   return `<div class="tile edt t${i % 4} ${ok ? 'ok' : ''}"><span class="sh">${FORMAS[i % 4]}</span><span class="q-opt" contenteditable="plaintext-only" spellcheck="false" data-opt data-ph="Alternativa ${i + 1}">${esc(txt)}</span>${tipo === 'opcion' ? '<button type="button" class="q-ok" data-a="ok" title="Marcar como respuesta correcta">✓</button>' : ''}<button type="button" class="q-rm" data-a="rmopt" title="Quitar alternativa">✕</button></div>`;
 }
@@ -412,7 +427,7 @@ function tiempoDefCliente(t) { return { opcion: 20, vf: 15, numerica: 40, encues
 function pasoForm(p, i) {
   let f = '';
   if (p.tipo === 'documento') f = campo('titulo', 'Título', p.titulo) + campo('texto', 'Texto de apoyo (opcional)', p.texto, 'area') + campo('url', 'Enlace (Canva, Google Slides, YouTube, Drive…) — o sube un archivo con el botón de abajo', p.url) + `<input type="hidden" data-k="driveId" value="${esc(p.driveId || '')}"><input type="hidden" data-k="mime" value="${esc(p.mime || '')}">` + (p.driveId ? '<div class="chip ok" style="margin-top:8px">📎 Archivo subido a tu Drive</div>' : '');
-  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><div class="imgpanel"></div></div>`;
+  else if (p.tipo === 'diapositiva') f = `<div class="edslide">${slideStage(p, true)}<div class="tb"><select data-k="layout" title="Diseño">${Object.entries(LAYOUTS).map(([k, v]) => `<option value="${k}" ${(p.layout || (p.imagen ? 'imagen-derecha' : 'solo')) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><select data-k="tema" title="Tema de color">${Object.entries(TEMAS).map(([k, v]) => `<option value="${k}" ${(p.tema || 'azul') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><button class="btn sm" data-a="gal">🎨 Diseños</button><button class="btn sm ghost" data-a="img">🖼 Imagen…</button>${p.imagen ? '<button class="btn sm ghost" data-a="noimg">✕ Quitar imagen</button>' : ''}</div><div class="hint">Escribe directamente sobre la diapositiva. Usa «- » al inicio de una línea para viñetas, **negrita** y *cursiva*.</div><input type="hidden" data-k="imagen" value="${esc(p.imagen || '')}"><input type="hidden" data-k="credito" value="${esc(p.credito || '')}"><div class="imgpanel"></div></div>`;
   else f = preguntaEditor(p);
   return `<div class="paso-ed" data-i="${i}"><div class="row"><span class="chip navy">${i + 1}</span><select data-k="tipo" style="max-width:240px">${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${p.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="sp"></span><button class="btn sm ghost" data-a="up">↑</button><button class="btn sm ghost" data-a="dn">↓</button><button class="btn sm ghost" data-a="rm">✕</button></div>${f}</div>`;
 }
@@ -487,7 +502,7 @@ function editor() {
   }
   function copiarCab() { const q = k => $(`#main > .card [data-k="${k}"]`).value; e.numero = +q('numero'); e.titulo = q('titulo'); e.descripcion = q('descripcion'); e.pauta_ia = q('pauta_ia'); e.estado = $('#est').value; e.bloqueo = $('#bl').value; e.apertura = $('#ap').value ? new Date($('#ap').value).getTime() : 0; e.cierre = $('#ci').value ? new Date($('#ci').value).getTime() : 0; }
   $('#pasos').onchange = ev => { if (ev.target.dataset.k === 'tipo') { const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); ps[i] = { id: ps[i].id, tipo: ps[i].tipo, titulo: ps[i].titulo, texto: ps[i].texto, pregunta: ps[i].pregunta, puntos: ps[i].puntos || 1, opciones: ['', '', '', ''], correcta: ps[i].tipo === 'vf' ? 'V' : 0, campos: ['Tu respuesta'] }; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); } };
-  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || ['img', 'noimg', 'ok', 'addopt', 'rmopt'].includes(a)) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
+  $('#pasos').onclick = ev => { const a = ev.target.dataset.a; if (!a || ['img', 'noimg', 'gal', 'ok', 'addopt', 'rmopt'].includes(a)) return; const i = +ev.target.closest('.paso-ed').dataset.i; const ps = leerPasos(); if (a === 'rm') ps.splice(i, 1); if (a === 'up' && i > 0) [ps[i - 1], ps[i]] = [ps[i], ps[i - 1]]; if (a === 'dn' && i < ps.length - 1) [ps[i + 1], ps[i]] = [ps[i], ps[i + 1]]; e.pasos = ps; e.material = leerMat(); copiarCab(); editor(); };
   $('#pasos').addEventListener('click', ev => {
     const a = ev.target.dataset.a; if (!['ok', 'addopt', 'rmopt'].includes(a)) return;
     const card = ev.target.closest('.paso-ed'); const tipo = $('[data-k="tipo"]', card).value; const box = $('.q-tiles', card);
@@ -498,8 +513,9 @@ function editor() {
   });  const rerender = () => { e.pasos = leerPasos(); e.material = leerMat(); copiarCab(); const sc = scrollY; editor(); scrollTo(0, sc); };
   $('#pasos').addEventListener('change', ev => { const k = ev.target.dataset.k; if (k === 'layout' || k === 'tema') rerender(); });
   $('#pasos').addEventListener('click', ev => {
-    const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg') return;
+    const a = ev.target.dataset.a; if (a !== 'img' && a !== 'noimg' && a !== 'gal') return;
     const ed = ev.target.closest('.edslide'); const set = (src, cred) => { $('[data-k="imagen"]', ed).value = src; $('[data-k="credito"]', ed).value = cred || ''; rerender(); };
+    if (a === 'gal') return galeria(ed, rerender);
     if (a === 'noimg') return set('', '');
     const panel = $('.imgpanel', ed); const titulo = ($('[data-k="titulo"]', ed).innerText || '').trim();
     panel.innerHTML = `<div class="card" style="margin-top:8px"><div class="row"><input class="iq" placeholder="Buscar imágenes en internet… (ej: puerto de Valparaíso)" value="${esc(titulo)}" style="flex:1;min-width:180px"><button class="btn sm iqb">🔍 Buscar</button></div><div class="row" style="margin-top:6px"><input class="iu" placeholder="…o pega la dirección (URL) de una imagen" style="flex:1;min-width:180px"><button class="btn sm ghost iub">Usar URL</button><button class="btn sm ghost iup">⬆ Subir</button><input type="file" class="iuf" accept="image/*" hidden></div><div class="imgres"></div><div class="hint">Resultados de Wikimedia Commons y Openverse (licencias libres). El crédito del autor queda en la diapositiva.</div></div>`;
@@ -643,7 +659,7 @@ function vCfg() {
   $('#main').innerHTML = `<div class="card"><h3>Ajustes generales</h3>${f('colegio', 'Establecimiento')}${f('asignatura', 'Asignatura')}${f('nombre_unidad', 'Nombre de la unidad')}${f('docente', 'Nombre del docente (aparece en informes)')}${f('total_sesiones', 'Total de sesiones planificadas', 'Se usa para calcular el progreso. Puedes cambiarlo cuando quieras (14 por defecto).')}${f('cursos', 'Cursos (separados por coma)', 'Aparecen como opciones al inscribirse.')}${f('exigencia', '% de exigencia para la nota 4,0')}${f('logo_url', 'URL del logo para los informes (opcional)')}
   <label>¿Los estudiantes pueden descargar su informe?</label><select data-c="informe_visible"><option value="NO" ${c.informe_visible !== 'SI' ? 'selected' : ''}>No (solo yo)</option><option value="SI" ${c.informe_visible === 'SI' ? 'selected' : ''}>Sí</option></select>
   <label>Enviar copia por correo al estudiante cuando termina de participar</label><select data-c="correo_auto"><option value="SI" ${c.correo_auto !== 'NO' ? 'selected' : ''}>Sí, automáticamente</option><option value="NO" ${c.correo_auto === 'NO' ? 'selected' : ''}>No (solo cuando yo la envíe)</option></select><div class="hint">Los correos salen desde tu cuenta de Google. Cuenta personal: ~100 por día; Google Workspace: ~1.500.</div>
-  ${f('correo_docente', 'Correo del docente (para pruebas)', 'Aquí llegan los correos de prueba. Escríbelo una vez. Los correos reales a estudiantes salen desde tu cuenta de Google.')}${f('url_app', 'Dirección (URL) de la plataforma para los estudiantes', 'Es el enlace que llevan los correos. Ej: https://leandrobascunan-code.github.io/econom-a/')}${f('modelo_ia', 'Modelo de IA (Groq)', 'Estado de la clave de IA: ' + (c.tiene_ia ? '✅ configurada' : '❌ falta GROQ_API_KEY en las propiedades del script'))}
+  ${f('correo_docente', 'Correo del docente (para pruebas)', 'Aquí llegan los correos de prueba. Escríbelo una vez. Los correos reales a estudiantes salen desde tu cuenta de Google.')}${f('url_app', 'Dirección (URL) de la plataforma para los estudiantes', 'Es el enlace que llevan los correos. Ej: https://leandrobascunan-code.github.io/econom-a/')}${f('modelo_ia', 'Modelo de IA (Groq) — déjalo vacío para elegir uno disponible automáticamente', 'Estado de la clave de IA: ' + (c.tiene_ia ? '✅ configurada' : '❌ falta GROQ_API_KEY en las propiedades del script'))}
   <button class="btn block" id="gc" style="margin-top:14px">Guardar ajustes</button></div>
   <div class="card"><h3>Datos</h3><p class="small mut">Toda la información (estudiantes, asistencia, respuestas y eventos de salida/reingreso) queda en tu planilla de Google.</p><a class="btn ghost" target="_blank" rel="noopener" href="${esc(T.planilla || '#')}">Abrir planilla de datos</a></div>`;
   $('#gc').onclick = async () => { const o = {}; $$('[data-c]').forEach(e => o[e.dataset.c] = e.value); try { await API.call('docGuardarConfig', { config: o }); T.cfg = { ...T.cfg, ...o }; toast('Ajustes guardados ✅'); } catch (e) { manejar(e); } };

@@ -144,7 +144,7 @@ async function entrarPart() {
     if (S.bloqueado) return pintarBloqueo(); pintarPaso();
   } catch (e) { if (!manejar(e)) { toast(e.message, 4500); b.disabled = false; } }
 }
-function programarLatido() { clearTimeout(S.hb); S.hb = setTimeout(async () => { await latir(); if (S.enPart) programarLatido(); }, S.ritmoDoc ? 2500 : 4000); }
+function programarLatido() { clearTimeout(S.hb); S.hb = setTimeout(async () => { await latir(); if (S.enPart) programarLatido(); }, S.ritmoDoc ? 1800 : 4000); }
 function detenerPart() {
   S.enPart = false; clearTimeout(S.hb); clearInterval(S.poll); clearInterval(S.tick);
   document.removeEventListener('visibilitychange', alVisibilidad); window.removeEventListener('pagehide', alSalirPagina); window.removeEventListener('beforeunload', antesDeCerrar);
